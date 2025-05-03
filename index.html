@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DAW Collaboration Tool</title>
+    <!-- PeerJS Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.4.7/peerjs.min.js"></script>
+    <!-- Application CSS -->
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <div class="container">
+        <h1>DAW Collaboration Tool</h1>
+        <p>Connect your DAW and collaborate in real-time with other musicians</p>
+        
+        <div class="status" id="connectionStatus">Status: Disconnected</div>
+        
+        <div class="audio-settings">
+            <h3>Audio Settings</h3>
+            <div class="settings-row">
+                <label for="audioInputSelect">Audio Input Device:</label>
+                <select id="audioInputSelect">
+                    <option value="" selected>Select Input Device...</option>
+                    <!-- Devices will be populated via JavaScript -->
+                </select>
+                <button id="refreshDevicesBtn" class="small-button">Refresh</button>
+            </div>
+            <div class="settings-row">
+                <label for="sampleRateSelect">Sample Rate:</label>
+                <select id="sampleRateSelect">
+                    <option value="44100">44.1 kHz</option>
+                    <option value="48000" selected>48 kHz</option>
+                    <option value="96000">96 kHz</option>
+                </select>
+            </div>
+            <div class="settings-row">
+                <label for="bufferSizeSelect">Buffer Size:</label>
+                <select id="bufferSizeSelect">
+                    <option value="256">256 (Lowest Latency)</option>
+                    <option value="512" selected>512</option>
+                    <option value="1024">1024</option>
+                    <option value="2048">2048 (Most Stable)</option>
+                </select>
+            </div>
+            <div class="settings-row">
+                <label for="bitDepthSelect">Bit Depth:</label>
+                <select id="bitDepthSelect">
+                    <option value="16">16-bit</option>
+                    <option value="24" selected>24-bit</option>
+                    <option value="32">32-bit float</option>
+                </select>
+            </div>
+        </div>
+        
+        <div class="controls">
+            <button id="startAudioBtn">1. Start Audio Input</button>
+            <button id="changeDeviceBtn" disabled>Change Input Device</button>
+            <button id="createSessionBtn" disabled>2. Create Session</button>
+            <button id="joinSessionBtn" disabled>2. Join Session</button>
+        </div>
+        
+        <div class="connection-info">
+            <div>
+                <label for="sessionIdInput">Session ID:</label>
+                <input type="text" id="sessionIdInput" placeholder="Enter session ID to join..." disabled />
+                <div id="myPeerId" class="status" style="margin-top: 10px;"></div>
+            </div>
+        </div>
+        
+        <div class="sharing-container" style="display: none;">
+            <h3>Share Your Session</h3>
+            <div class="settings-row">
+                <input type="text" id="shareUrlInput" readonly />
+                <button id="copyLinkBtn" class="small-button">Copy Link</button>
+            </div>
+            <p class="sharing-instructions">
+                Share this link with others to invite them to your session. They'll need to:
+                <ol>
+                    <li>Open the link in their browser</li>
+                    <li>Select their audio input device</li>
+                    <li>Click "Start Audio Input"</li>
+                    <li>Click "Join Session"</li>
+                </ol>
+            </p>
+        </div>
+        
+        <div class="meters">
+            <div class="meter">
+                <label>Local Audio Level:</label>
+                <meter id="localMeter" min="0" max="100" value="0"></meter>
+            </div>
+            <div class="meter">
+                <label>Remote Audio Level:</label>
+                <meter id="remoteMeter" min="0" max="100" value="0"></meter>
+            </div>
+        </div>
+        
+        <div class="peers-container">
+            <h3>Connected Peers:</h3>
+            <ul id="peerList" class="peer-list">
+                <!-- Peers will appear here -->
+            </ul>
+        </div>
+        
+        <div class="logs">
+            <div id="logContainer"></div>
+        </div>
+        
+        <h2>Setup Instructions</h2>
+        <ol>
+            <li>Route your DAW's audio output to your system's input (using Loopback, Soundflower, etc.)</li>
+            <li>Select your virtual audio device from the Audio Input dropdown</li>
+            <li>Configure audio settings as needed for your project</li>
+            <li>Click "Start Audio Input" to capture audio from your system</li>
+            <li>Create a new session or join an existing one using a Session ID</li>
+            <li>Once connected, you'll hear each other's audio streams</li>
+        </ol>
+    </div>
+
+    <!-- Application JavaScript -->
+    <script src="js/utils.js"></script>
+    <script src="js/audio-manager.js"></script>
+    <script src="js/peer-manager.js"></script>
+    <script src="js/ui-controller.js"></script>
+    <script src="js/main.js"></script>
+</body>
+</html>
