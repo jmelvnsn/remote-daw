@@ -126,18 +126,22 @@
     <script src="js/ui-controller.js"></script>
     <script src="js/main.js"></script>
     
-    <!-- Audio Debug Panel -->
-    <div id="audio-debug-panel" style="display: none; position: fixed; bottom: 0; right: 0; width: 300px; background-color: #1e1e1e; border: 1px solid #444; padding: 10px; z-index: 9999;">
-        <h3>Audio Debug</h3>
-        <!-- Add this button to the debug panel in index.html -->
-        <button id="force-update-btn" style="width: 100%; margin-bottom: 5px; background-color: #ff7597;">Force Update Latency</button>
-        <button id="force-audio-btn" style="width: 100%; margin-bottom: 5px;">Force Enable Audio</button>
-        <button id="restart-audio-btn" style="width: 100%; margin-bottom: 5px;">Restart Audio Processing</button>
-        <button id="check-connections-btn" style="width: 100%; margin-bottom: 5px;">Check Connections</button>
-        <button id="refresh-latency-btn" style="width: 100%; margin-bottom: 5px; background-color: #018786;">Refresh Latency Display</button>
-        <div id="audio-debug-log" style="height: 100px; overflow-y: auto; background-color: #121212; padding: 5px; margin-top: 5px; font-family: monospace; font-size: 11px;"></div>
+
+    <!-- Updated Debug Panel HTML -->
+    <div id="audio-debug-panel" style="display: none;">
+        <h3>Audio Debug Panel</h3>
+        <button id="force-update-btn" class="warning">Force Update Latency</button>
+        <button id="force-audio-btn" class="primary">Force Enable Audio</button>
+        <button id="restart-audio-btn">Restart Audio Processing</button>
+        <button id="check-connections-btn">Check Connections</button>
+        <button id="refresh-latency-btn" class="secondary">Refresh Latency Display</button>
+        <button id="fix-latency-updates-btn">Fix Latency Updates</button>
+        <div id="audio-debug-log"></div>
     </div>
     
+    <!-- Visible Debug Button -->
+<button id="visible-debug-btn">Open Debug Panel</button>
+
     <script>
         // Debug panel toggle with Alt+D
         document.addEventListener('keydown', (e) => {

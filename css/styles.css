@@ -313,6 +313,104 @@ input[type="text"]:read-only {
     margin-top: 20px;
 }
 
+/* Debug Panel Style Improvements */
+#audio-debug-panel {
+    position: fixed;
+    bottom: 80px; /* Position above the debug button */
+    right: 20px;
+    width: 320px;
+    background-color: #1e1e1e;
+    border: 1px solid #444;
+    border-radius: 8px;
+    padding: 15px;
+    z-index: 10000; /* Ensure it's above other elements including the button */
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    color: #e0e0e0;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+#audio-debug-panel h3 {
+    margin-top: 0;
+    color: #bb86fc;
+    border-bottom: 1px solid #444;
+    padding-bottom: 8px;
+    margin-bottom: 12px;
+    font-size: 16px;
+}
+
+#audio-debug-panel button {
+    width: 100%;
+    margin-bottom: 8px;
+    padding: 8px 10px;
+    background-color: #2d2d2d;
+    color: #e0e0e0;
+    border: 1px solid #444;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.2s, color 0.2s;
+    font-size: 12px;
+}
+
+#audio-debug-panel button:hover {
+    background-color: #3d3d3d;
+}
+
+/* Special button colors */
+#audio-debug-panel button.primary {
+    background-color: #03dac6;
+    color: #121212;
+}
+
+#audio-debug-panel button.secondary {
+    background-color: #bb86fc;
+    color: #121212;
+}
+
+#audio-debug-panel button.warning {
+    background-color: #ff7597;
+    color: #121212;
+}
+
+#audio-debug-panel #audio-debug-log {
+    height: 150px;
+    overflow-y: auto;
+    background-color: #121212;
+    padding: 8px;
+    margin-top: 10px;
+    font-family: 'Courier New', monospace;
+    font-size: 11px;
+    border-radius: 4px;
+    border: 1px solid #333;
+}
+
+#audio-debug-log div {
+    margin-bottom: 4px;
+    border-bottom: 1px solid #333;
+    padding-bottom: 4px;
+    word-wrap: break-word;
+}
+
+/* Visible debug button style improvements */
+#visible-debug-btn {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    z-index: 9999;
+    background-color: #bb86fc;
+    color: #121212;
+    font-weight: bold;
+    padding: 10px 15px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    transition: background-color 0.3s;
+}
+
+#visible-debug-btn:hover {
+    background-color: #9d4edd;
+}
+
 /* Warning for low buffer sizes */
 .buffer-warning {
     color: #ff7597;
