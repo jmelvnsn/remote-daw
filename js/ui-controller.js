@@ -61,7 +61,78 @@ class UIController {
         });
         document.querySelector('.controls').appendChild(debugBtn);
         
+        // Add UI debug button
+        const uiDebugBtn = document.createElement('button');
+        uiDebugBtn.textContent = 'Debug UI';
+        uiDebugBtn.style.marginTop = '10px';
+        uiDebugBtn.style.marginLeft = '5px';
+        uiDebugBtn.addEventListener('click', () => {
+            this.debugUI();
+        });
+        document.querySelector('.controls').appendChild(uiDebugBtn);
+        
         utils.log('UI Controller initialized');
+    }
+    
+    /**
+     * Debug UI elements
+     * Helps troubleshoot issues with the UI
+     */
+    static debugUI() {
+        console.log('=== UI Debug Information ===');
+        
+        // Check meters container
+        const metersContainer = utils.$('.meters');
+        console.log('Meters container:', metersContainer);
+        
+        // Check local meter
+        const localMeter = utils.$('#localMeter');
+        console.log('Local meter element:', localMeter);
+        if (localMeter) {
+            console.log('Local meter value:', localMeter.value);
+        }
+        
+        // Check remote meters container
+        console.log('Remote meter container:', this.remoteMeterContainer);
+        
+        // Check peer elements
+        const peerList = utils.$('#peerList');
+        console.log('Peer list element:', peerList);
+        console.log('Peer list children:', peerList ? peerList.children.length : 0);
+        
+        // Check for remote meter elements
+        const meterElements = document.querySelectorAll('meter');
+        console.log('Total meter elements:', meterElements.length);
+        meterElements.forEach((meter, index) => {
+            console.log(`Meter ${index} id:`, meter.id, 'value:', meter.value);
+        });
+        
+        // Check for latency elements
+        const latencyElements = document.querySelectorAll('.latency-info');
+        console.log('Total latency info elements:', latencyElements.length);
+        latencyElements.forEach((span, index) => {
+            console.log(`Latency span ${index} id:`, span.id, 'text:', span.textContent);
+        });
+        
+        // Log connected peers
+        if (window.peerManager) {
+            const connectedPeers = window.peerManager.getConnectedPeers();
+            console.log('Connected peers:', connectedPeers);
+            
+            // Check if each connected peer has a meter
+            connectedPeers.forEach(peerId => {
+                const peerMeter = utils.$(`#remoteMeter-${peerId}`);
+                const peerLatency = utils.$(`#latency-${peerId}`);
+                console.log(`Peer ${peerId} has meter:`, !!peerMeter, 'has latency element:', !!peerLatency);
+            });
+        }
+        
+        // Check latency monitor if available
+        if (window.latencyMonitor) {
+            window.latencyMonitor.debugLatencyMonitor();
+        }
+        
+        utils.log('UI debugging information logged to console');
     }
     
     /**
@@ -291,23 +362,30 @@ class UIController {
                 break;
         }
     }
-
+    
     /**
      * Create or update a meter for a remote peer
      * @param {string} peerId The ID of the peer
      */
     static createRemoteMeter(peerId) {
+        console.log(`Creating remote meter for peer: ${peerId}`);
+        
         // Check if the container exists, if not create it
         if (!this.remoteMeterContainer) {
             const metersDiv = utils.$('.meters');
+            console.log('Creating new remote meters container in:', metersDiv);
+            
             this.remoteMeterContainer = document.createElement('div');
             this.remoteMeterContainer.id = 'remoteMeterContainer';
             this.remoteMeterContainer.className = 'remote-meters';
             metersDiv.appendChild(this.remoteMeterContainer);
+            
+            console.log('Remote meters container created:', this.remoteMeterContainer);
         }
         
         // Check if meter already exists for this peer
         if (utils.$(`#remoteMeter-${peerId}`)) {
+            console.log(`Remote meter for peer ${peerId} already exists, skipping creation`);
             return; // Already exists
         }
         
@@ -316,19 +394,52 @@ class UIController {
         meterDiv.className = 'meter';
         meterDiv.id = `remoteMeterDiv-${peerId}`;
         
-        // Include latency info in the label
+        // Create label element
         const label = document.createElement('label');
-        label.innerHTML = `Remote Audio (${peerId}): ${latencyMonitor.getLatencyHtml(peerId)}`;
         
+        // Use text node for the first part of the label
+        const labelText = document.createTextNode(`Remote Audio (${peerId}): `);
+        label.appendChild(labelText);
+        
+        // Create latency span element with a unique ID for targeting
+        const latencySpan = document.createElement('span');
+        latencySpan.id = `latency-${peerId}`;
+        latencySpan.className = 'latency-info';
+        latencySpan.textContent = 'Measuring latency...';
+        
+        // Append latency span to label
+        label.appendChild(latencySpan);
+        
+        // Create meter element
         const meter = document.createElement('meter');
         meter.id = `remoteMeter-${peerId}`;
         meter.min = 0;
         meter.max = 100;
         meter.value = 0;
         
+        // Assemble the meter div
         meterDiv.appendChild(label);
         meterDiv.appendChild(meter);
         this.remoteMeterContainer.appendChild(meterDiv);
+        
+        // Debug log
+        console.log(`Created remote meter for peer ${peerId}:`);
+        console.log(`- Meter element ID: remoteMeter-${peerId}`);
+        console.log(`- Latency element ID: latency-${peerId}`);
+        
+        // Verify the elements were created successfully
+        const createdMeter = utils.$(`#remoteMeter-${peerId}`);
+        const createdLatency = utils.$(`#latency-${peerId}`);
+        
+        console.log(`Verification - Meter exists: ${!!createdMeter}, Latency exists: ${!!createdLatency}`);
+        
+        // Force a layout update to ensure elements are properly rendered
+        setTimeout(() => {
+            if (window.latencyMonitor) {
+                window.latencyMonitor.updateLatencyDisplay(peerId);
+                console.log(`Triggered latency display update for ${peerId}`);
+            }
+        }, 100);
     }
     
     /**
@@ -336,15 +447,21 @@ class UIController {
      * @param {string} peerId The ID of the peer
      */
     static removeRemoteMeter(peerId) {
+        console.log(`Removing remote meter for peer: ${peerId}`);
+        
         const meterDiv = utils.$(`#remoteMeterDiv-${peerId}`);
         if (meterDiv) {
             meterDiv.remove();
+            console.log(`Removed meter div for peer ${peerId}`);
+        } else {
+            console.log(`Meter div for peer ${peerId} not found`);
         }
         
         // If no remote meters left, remove the container
         if (this.remoteMeterContainer && this.remoteMeterContainer.children.length === 0) {
             this.remoteMeterContainer.remove();
             this.remoteMeterContainer = null;
+            console.log('Removed remote meters container (no children left)');
         }
     }
     
@@ -435,8 +552,11 @@ class UIController {
      * @param {string} peerId The ID of the peer
      */
     static addPeerToList(peerId) {
+        console.log(`Adding peer to list: ${peerId}`);
+        
         // Check if already in the list
         if (utils.$(`#peer-${peerId}`)) {
+            console.log(`Peer ${peerId} already in list, skipping`);
             return; // Already in the list
         }
         
@@ -460,6 +580,8 @@ class UIController {
         peerItem.appendChild(disconnectBtn);
         this.peerList.appendChild(peerItem);
         
+        console.log(`Peer ${peerId} added to list`);
+        
         // Create the remote meter for this peer if not already created
         this.createRemoteMeter(peerId);
     }
@@ -469,9 +591,14 @@ class UIController {
      * @param {string} peerId The ID of the peer
      */
     static removePeerFromList(peerId) {
+        console.log(`Removing peer from list: ${peerId}`);
+        
         const peerItem = utils.$(`#peer-${peerId}`);
         if (peerItem) {
             peerItem.remove();
+            console.log(`Removed peer ${peerId} from list`);
+        } else {
+            console.log(`Peer ${peerId} not found in list`);
         }
         
         // Remove the remote meter for this peer
@@ -480,6 +607,7 @@ class UIController {
         // Update connection status if no peers left
         if (this.peerList.children.length === 0) {
             this.connectionStatus.textContent = 'Status: No peers connected';
+            console.log('Updated connection status: No peers connected');
         }
     }
 }

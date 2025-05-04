@@ -32,6 +32,11 @@ class LatencyMonitor {
             this.sendPing(peerId, connection);
         }, this.pingInterval);
         
+        // Send an immediate ping to get initial values
+        setTimeout(() => {
+            this.sendPing(peerId, connection);
+        }, 500);
+        
         // Setup data handler for pings/pongs
         connection.on('data', (data) => {
             if (data.type === 'latency-ping') {
@@ -41,11 +46,16 @@ class LatencyMonitor {
                     pingId: data.pingId,
                     timestamp: data.timestamp
                 });
+                console.log(`Received ping from ${peerId}, sent pong`);
             } else if (data.type === 'latency-pong') {
                 // Process the pong
                 this.processPong(peerId, data);
             }
         });
+        
+        // Log debug info
+        console.log(`Latency monitoring started for peer ${peerId}`);
+        this.debugLatencyMonitor();
     }
     
     /**
@@ -77,6 +87,10 @@ class LatencyMonitor {
         const pingId = `ping-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
         
         // Store the ping
+        if (!this.pendingPings) {
+            this.pendingPings = {};
+        }
+        
         this.pendingPings[pingId] = {
             timestamp: Date.now(),
             peerId: peerId
@@ -88,6 +102,9 @@ class LatencyMonitor {
             pingId: pingId,
             timestamp: Date.now()
         });
+        
+        // Debug log
+        console.log(`Sent ping ${pingId} to peer ${peerId}`);
     }
     
     /**
@@ -101,11 +118,13 @@ class LatencyMonitor {
         
         // Check if we have a matching ping
         if (!this.pendingPings[pingId]) {
+            console.log(`Received unknown pong ${pingId} from ${peerId}`);
             return; // Unknown ping ID
         }
         
         // Calculate round-trip time
         const rtt = now - this.pendingPings[pingId].timestamp;
+        console.log(`Received pong from ${peerId}, RTT: ${rtt}ms`);
         
         // Add to history
         if (!this.pingHistory[peerId]) {
@@ -187,11 +206,25 @@ class LatencyMonitor {
             // Update text and class
             latencyEl.textContent = `Latency: ${stats.avg}ms | Jitter: ${stats.jitter}ms`;
             
+            // Debug log to confirm values
+            console.log(`Updated latency for ${peerId}: ${stats.avg}ms, Jitter: ${stats.jitter}ms`);
+            
             // Remove all quality classes
             latencyEl.classList.remove('latency-good', 'latency-medium', 'latency-poor');
             
             // Add the current quality class
             latencyEl.classList.add(`latency-${qualityLevel}`);
+        } else {
+            console.log(`Latency element for peer ${peerId} not found in DOM. Element ID: latency-${peerId}`);
+            
+            // Try to find the element by different means
+            const allSpans = document.querySelectorAll('span');
+            console.log(`Total span elements: ${allSpans.length}`);
+            for (let i = 0; i < allSpans.length; i++) {
+                if (allSpans[i].id.includes(peerId)) {
+                    console.log(`Found element with matching peerId: ${allSpans[i].id}`);
+                }
+            }
         }
     }
     
@@ -202,6 +235,43 @@ class LatencyMonitor {
      */
     getLatencyHtml(peerId) {
         return `<span id="latency-${peerId}" class="latency-info">Measuring latency...</span>`;
+    }
+    
+    /**
+     * Debug the latency monitor
+     * Shows the current state of the latency monitor in the console
+     */
+    debugLatencyMonitor() {
+        console.log("=== Latency Monitor Debug Info ===");
+        console.log("Active ping intervals:", Object.keys(this.pingIntervals).length);
+        console.log("Pending pings:", Object.keys(this.pendingPings).length);
+        
+        // Log history for each peer
+        console.log("Ping History:");
+        for (const peerId in this.pingHistory) {
+            const stats = this.calculateLatencyStats(peerId);
+            console.log(`- Peer ${peerId}: ${this.pingHistory[peerId].length} samples`);
+            console.log(`  Latest values: ${this.pingHistory[peerId].slice(-5).join(', ')}ms`);
+            console.log(`  Stats: avg=${stats.avg}ms, min=${stats.min}ms, max=${stats.max}ms, jitter=${stats.jitter}ms`);
+            
+            // Check if the UI element exists
+            const latencyEl = utils.$(`#latency-${peerId}`);
+            console.log(`  UI Element exists: ${!!latencyEl}`);
+            if (latencyEl) {
+                console.log(`  Current display: "${latencyEl.textContent}"`);
+            }
+        }
+        
+        // Check all connected peers
+        if (window.peerManager) {
+            const connectedPeers = window.peerManager.getConnectedPeers();
+            console.log("Connected peers:", connectedPeers);
+            
+            // Check if we're monitoring all connected peers
+            for (const peerId of connectedPeers) {
+                console.log(`- Peer ${peerId}: monitoring=${!!this.pingIntervals[peerId]}`);
+            }
+        }
     }
 }
 
