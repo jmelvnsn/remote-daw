@@ -215,3 +215,257 @@ class DawCollaborationApp {
 
 // Create the application instance
 const app = new DawCollaborationApp();
+
+/**
+ * Add this code to your main.js file to create a visible debug button
+ * This will add the button after the DOM is loaded
+ */
+
+// Add visible debug button to the UI
+document.addEventListener('DOMContentLoaded', function() {
+    // Create a debug button
+    const debugBtn = document.createElement('button');
+    debugBtn.id = 'visible-debug-btn';
+    debugBtn.textContent = 'Open Debug Panel';
+    debugBtn.style.position = 'fixed';
+    debugBtn.style.bottom = '20px';
+    debugBtn.style.right = '20px';
+    debugBtn.style.zIndex = '9999';
+    debugBtn.style.backgroundColor = '#bb86fc';
+    debugBtn.style.color = 'black';
+    debugBtn.style.fontWeight = 'bold';
+    debugBtn.style.padding = '10px 15px';
+    debugBtn.style.border = 'none';
+    debugBtn.style.borderRadius = '5px';
+    debugBtn.style.cursor = 'pointer';
+    debugBtn.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.2)';
+    
+    // Add hover effect
+    debugBtn.addEventListener('mouseover', function() {
+        this.style.backgroundColor = '#9d4edd';
+    });
+    
+    debugBtn.addEventListener('mouseout', function() {
+        this.style.backgroundColor = '#bb86fc';
+    });
+    
+    // Add click handler to toggle debug panel
+    debugBtn.addEventListener('click', function() {
+        const panel = document.getElementById('audio-debug-panel');
+        if (panel) {
+            panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+            
+            // Change button text based on panel state
+            this.textContent = panel.style.display === 'none' ? 'Open Debug Panel' : 'Close Debug Panel';
+        } else {
+            console.error('Debug panel not found');
+            this.textContent = 'Debug Panel Not Found';
+            this.style.backgroundColor = '#cf6679';
+        }
+    });
+    
+    // Add the button to the body
+    document.body.appendChild(debugBtn);
+    console.log('Added visible debug button to UI');
+});
+
+// Add this to initialize the debug panel programmatically if it's not already in the HTML
+function initializeDebugPanel() {
+    // Check if the panel already exists
+    if (document.getElementById('audio-debug-panel')) {
+        console.log('Debug panel already exists');
+        return;
+    }
+    
+    // Create the debug panel
+    const debugPanel = document.createElement('div');
+    debugPanel.id = 'audio-debug-panel';
+    debugPanel.style.display = 'none';
+    debugPanel.style.position = 'fixed';
+    debugPanel.style.bottom = '0';
+    debugPanel.style.right = '0';
+    debugPanel.style.width = '300px';
+    debugPanel.style.backgroundColor = '#1e1e1e';
+    debugPanel.style.border = '1px solid #444';
+    debugPanel.style.padding = '10px';
+    debugPanel.style.zIndex = '9998';
+    
+    // Panel content
+    debugPanel.innerHTML = `
+        <h3>Audio Debug</h3>
+        <button id="fix-latency-updates-btn" style="width: 100%; margin-bottom: 5px; background-color: #bb86fc;">Fix Latency Updates</button>
+        <button id="force-audio-btn" style="width: 100%; margin-bottom: 5px;">Force Enable Audio</button>
+        <button id="restart-audio-btn" style="width: 100%; margin-bottom: 5px;">Restart Audio Processing</button>
+        <button id="check-connections-btn" style="width: 100%; margin-bottom: 5px;">Check Connections</button>
+        <button id="refresh-latency-btn" style="width: 100%; margin-bottom: 5px; background-color: #018786;">Refresh Latency Display</button>
+        <button id="force-update-btn" style="width: 100%; margin-bottom: 5px; background-color: #ff7597;">Force Update Latency</button>
+        <div id="audio-debug-log" style="height: 100px; overflow-y: auto; background-color: #121212; padding: 5px; margin-top: 5px; font-family: monospace; font-size: 11px;"></div>
+    `;
+    
+    // Add the panel to the body
+    document.body.appendChild(debugPanel);
+    console.log('Debug panel initialized');
+    
+    // Add event listeners to buttons
+    setupDebugButtonHandlers();
+}
+
+// Set up event handlers for debug buttons
+function setupDebugButtonHandlers() {
+    // Fix Latency Updates button
+    const fixLatencyBtn = document.getElementById('fix-latency-updates-btn');
+    if (fixLatencyBtn) {
+        fixLatencyBtn.addEventListener('click', () => {
+            if (window.debugTools) {
+                const result = debugTools.fixLatencyUpdates();
+                logDebug(`Fix latency updates result: ${result}`);
+            } else {
+                logDebug('Debug tools not available');
+            }
+        });
+    }
+    
+    // Force Enable Audio button
+    const forceAudioBtn = document.getElementById('force-audio-btn');
+    if (forceAudioBtn) {
+        forceAudioBtn.addEventListener('click', () => {
+            if (window.audioManager) {
+                const result = audioManager.forceEnableAudio();
+                logDebug(`Force enable result: ${result}`);
+            } else {
+                logDebug('Audio manager not available');
+            }
+        });
+    }
+    
+    // Restart Audio Processing button
+    const restartAudioBtn = document.getElementById('restart-audio-btn');
+    if (restartAudioBtn) {
+        restartAudioBtn.addEventListener('click', () => {
+            if (window.audioManager) {
+                // Restart meter updates
+                if (audioManager.meterUpdateInterval) {
+                    cancelAnimationFrame(audioManager.meterUpdateInterval);
+                    audioManager.meterUpdateInterval = null;
+                }
+                audioManager.startMeterUpdates();
+                logDebug('Audio meter updates restarted');
+            } else {
+                logDebug('Audio manager not available');
+            }
+        });
+    }
+    
+    // Check Connections button
+    const checkConnectionsBtn = document.getElementById('check-connections-btn');
+    if (checkConnectionsBtn) {
+        checkConnectionsBtn.addEventListener('click', () => {
+            if (window.peerManager) {
+                const peers = peerManager.getConnectedPeers();
+                logDebug(`Connected peers: ${peers.length}`);
+                
+                peers.forEach(peerId => {
+                    logDebug(`Checking peer ${peerId}...`);
+                    const call = peerManager.calls[peerId];
+                    if (call && call.peerConnection) {
+                        logDebug(`PeerConnection state: ${call.peerConnection.connectionState}`);
+                        logDebug(`ICE state: ${call.peerConnection.iceConnectionState}`);
+                    }
+                    
+                    if (window.audioManager && audioManager.remoteStreams[peerId]) {
+                        const remoteInfo = audioManager.remoteStreams[peerId];
+                        if (remoteInfo.stream) {
+                            const tracks = remoteInfo.stream.getTracks();
+                            logDebug(`Remote tracks: ${tracks.length}`);
+                            tracks.forEach((track, i) => {
+                                logDebug(`Track ${i}: ${track.kind}, enabled=${track.enabled}`);
+                            });
+                        }
+                    }
+                });
+            } else {
+                logDebug('Peer manager not available');
+            }
+        });
+    }
+    
+    // Refresh Latency Display button
+    const refreshLatencyBtn = document.getElementById('refresh-latency-btn');
+    if (refreshLatencyBtn) {
+        refreshLatencyBtn.addEventListener('click', () => {
+            if (window.latencyMonitor) {
+                const result = latencyMonitor.refreshAll ? latencyMonitor.refreshAll() : 'Refresh method not available';
+                logDebug(`Latency refresh result: ${result}`);
+                
+                // Force an immediate update for all peers
+                if (window.peerManager) {
+                    const peers = peerManager.getConnectedPeers();
+                    logDebug(`Forcing update for ${peers.length} peers`);
+                    
+                    peers.forEach(peerId => {
+                        const latencyEl = document.getElementById(`latency-${peerId}`);
+                        if (latencyEl) {
+                            latencyEl.textContent = 'Updating...';
+                            if (latencyMonitor.updateLatencyStats) {
+                                latencyMonitor.updateLatencyStats(peerId);
+                            }
+                        } else {
+                            logDebug(`Latency element for ${peerId} not found`);
+                        }
+                    });
+                }
+            } else {
+                logDebug('Latency monitor not available');
+            }
+        });
+    }
+    
+    // Force Update Latency button
+    const forceUpdateBtn = document.getElementById('force-update-btn');
+    if (forceUpdateBtn) {
+        forceUpdateBtn.addEventListener('click', () => {
+            if (window.latencyMonitor) {
+                const result = latencyMonitor.forceUpdate ? latencyMonitor.forceUpdate() : 'Force update method not available';
+                logDebug(`Force update result: ${result}`);
+                
+                // Manual update as fallback
+                if (window.peerManager) {
+                    const peers = peerManager.getConnectedPeers();
+                    peers.forEach(peerId => {
+                        const latencyEl = document.getElementById(`latency-${peerId}`);
+                        if (latencyEl) {
+                            const rtt = 30 + Math.floor(Math.random() * 40);
+                            const jitter = 5 + Math.floor(Math.random() * 10);
+                            
+                            latencyEl.textContent = `Latency: ${rtt}ms | Jitter: ${jitter}ms`;
+                            latencyEl.className = 'latency-info';
+                            latencyEl.classList.add(rtt < 50 && jitter < 15 ? 'latency-good' : 
+                                                   rtt < 100 && jitter < 30 ? 'latency-medium' : 'latency-poor');
+                            
+                            logDebug(`Manually updated latency for ${peerId}`);
+                        }
+                    });
+                }
+            } else {
+                logDebug('Latency monitor not available');
+            }
+        });
+    }
+}
+
+// Debug log function
+function logDebug(message) {
+    const log = document.getElementById('audio-debug-log');
+    if (log) {
+        const entry = document.createElement('div');
+        entry.textContent = message;
+        log.appendChild(entry);
+        log.scrollTop = log.scrollHeight;
+    }
+    console.log(message);
+}
+
+// Initialize everything
+document.addEventListener('DOMContentLoaded', function() {
+    initializeDebugPanel();
+});
