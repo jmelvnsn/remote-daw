@@ -365,6 +365,7 @@ class UIController {
     
     /**
      * Create or update a meter for a remote peer
+     * This updated version ensures latency display works properly
      * @param {string} peerId The ID of the peer
      */
     static createRemoteMeter(peerId) {
@@ -372,7 +373,7 @@ class UIController {
         
         // Check if the container exists, if not create it
         if (!this.remoteMeterContainer) {
-            const metersDiv = utils.$('.meters');
+            const metersDiv = document.querySelector('.meters');
             console.log('Creating new remote meters container in:', metersDiv);
             
             this.remoteMeterContainer = document.createElement('div');
@@ -384,7 +385,7 @@ class UIController {
         }
         
         // Check if meter already exists for this peer
-        if (utils.$(`#remoteMeter-${peerId}`)) {
+        if (document.getElementById(`remoteMeter-${peerId}`)) {
             console.log(`Remote meter for peer ${peerId} already exists, skipping creation`);
             return; // Already exists
         }
@@ -423,23 +424,21 @@ class UIController {
         this.remoteMeterContainer.appendChild(meterDiv);
         
         // Debug log
-        console.log(`Created remote meter for peer ${peerId}:`);
+        console.log(`Created remote meter elements for peer ${peerId}:`);
+        console.log(`- Meter div ID: remoteMeterDiv-${peerId}`);
         console.log(`- Meter element ID: remoteMeter-${peerId}`);
-        console.log(`- Latency element ID: latency-${peerId}`);
+        console.log(`- Latency span ID: latency-${peerId}`);
         
-        // Verify the elements were created successfully
-        const createdMeter = utils.$(`#remoteMeter-${peerId}`);
-        const createdLatency = utils.$(`#latency-${peerId}`);
-        
-        console.log(`Verification - Meter exists: ${!!createdMeter}, Latency exists: ${!!createdLatency}`);
-        
-        // Force a layout update to ensure elements are properly rendered
-        setTimeout(() => {
-            if (window.latencyMonitor) {
-                window.latencyMonitor.updateLatencyDisplay(peerId);
-                console.log(`Triggered latency display update for ${peerId}`);
-            }
-        }, 100);
+        // Force an immediate latency check if latencyMonitor is available
+        if (window.latencyMonitor) {
+            setTimeout(() => {
+                console.log(`Forcing latency update for peer ${peerId}`);
+                // Force a ping to get initial values
+                if (window.peerManager && window.peerManager.connections[peerId]) {
+                    window.latencyMonitor.sendPing(peerId, window.peerManager.connections[peerId]);
+                }
+            }, 500);
+        }
     }
     
     /**
