@@ -349,6 +349,7 @@ input[type="text"]:read-only {
     cursor: pointer;
     transition: background-color 0.2s, color 0.2s;
     font-size: 12px;
+    margin: 5px 0;
 }
 
 #audio-debug-panel button:hover {
