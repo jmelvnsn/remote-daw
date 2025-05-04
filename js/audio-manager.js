@@ -419,6 +419,98 @@ class AudioManager {
     }
     
     /**
+     * Force enable audio output for testing
+     * Call this from the console: audioManager.forceEnableAudio()
+     */
+    forceEnableAudio() {
+        utils.log('Forcing audio output enabled');
+        
+        // Resume audio context
+        if (this.audioContext && this.audioContext.state !== 'running') {
+            utils.log(`Resuming audio context (current state: ${this.audioContext.state})`);
+            this.audioContext.resume().then(() => {
+                utils.log(`Audio context state now: ${this.audioContext.state}`);
+            });
+        }
+        
+        // Create a silent sound to unblock audio in Safari and Mobile browsers
+        try {
+            const silentContext = new (window.AudioContext || window.webkitAudioContext)();
+            const buffer = silentContext.createBuffer(1, 1, 22050);
+            const source = silentContext.createBufferSource();
+            source.buffer = buffer;
+            source.connect(silentContext.destination);
+            source.start(0);
+            utils.log('Played silent sound to unblock audio');
+            
+            // Clean up
+            setTimeout(() => {
+                silentContext.close().then(() => {
+                    utils.log('Temporary silent context closed');
+                });
+            }, 1000);
+        } catch (e) {
+            utils.log(`Error playing silent sound: ${e.message}`);
+        }
+        
+        // Play any fallback audio elements
+        document.querySelectorAll('audio[id^="audio-fallback-"]').forEach(audioEl => {
+            utils.log(`Attempting to play fallback audio element: ${audioEl.id}`);
+            audioEl.muted = false;
+            audioEl.volume = 1.0;
+            audioEl.play().then(() => {
+                utils.log(`Successfully playing ${audioEl.id}`);
+            }).catch(e => {
+                utils.log(`Failed to play ${audioEl.id}: ${e.message}`);
+            });
+        });
+        
+        // Reconnect all audio nodes
+        for (const peerId in this.remoteStreams) {
+            utils.log(`Reconnecting audio for peer ${peerId}`);
+            const remoteInfo = this.remoteStreams[peerId];
+            
+            try {
+                // Disconnect existing nodes
+                if (remoteInfo.source) remoteInfo.source.disconnect();
+                if (remoteInfo.gain) remoteInfo.gain.disconnect();
+                
+                // Reconnect everything
+                if (remoteInfo.stream && this.audioContext) {
+                    remoteInfo.source = this.audioContext.createMediaStreamSource(remoteInfo.stream);
+                    remoteInfo.analyser = this.audioContext.createAnalyser();
+                    remoteInfo.analyser.fftSize = 256;
+                    remoteInfo.dataArray = new Uint8Array(remoteInfo.analyser.frequencyBinCount);
+                    remoteInfo.gain = this.audioContext.createGain();
+                    remoteInfo.gain.gain.value = 1.0;
+                    
+                    // Connect nodes
+                    remoteInfo.source.connect(remoteInfo.analyser);
+                    remoteInfo.source.connect(remoteInfo.gain);
+                    remoteInfo.gain.connect(this.audioContext.destination);
+                    
+                    utils.log(`Audio graph rebuilt for peer ${peerId}`);
+                }
+            } catch (e) {
+                utils.log(`Error reconnecting audio for peer ${peerId}: ${e.message}`);
+            }
+        }
+        
+        // Restart meter updates
+        if (this.meterUpdateInterval) {
+            cancelAnimationFrame(this.meterUpdateInterval);
+            this.meterUpdateInterval = null;
+        }
+        this.startMeterUpdates();
+        
+        utils.log('Audio force-enable complete');
+        
+        return Object.keys(this.remoteStreams).length > 0 ? 
+            'Audio connections rebuilt' : 
+            'No remote streams found';
+    }
+    
+    /**
      * Debug audio input to help troubleshoot mic issues
      */
     debugAudioInput() {

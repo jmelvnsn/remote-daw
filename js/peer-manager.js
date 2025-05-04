@@ -153,14 +153,50 @@ class PeerManager {
                 
                 utils.log(`Calling peer: ${remotePeerId}`);
                 
-                // Make the call with our local stream
-                const call = this.peer.call(remotePeerId, audioManager.getLocalStream());
+                // Make the call with our local stream and explicit audio constraints
+                const call = this.peer.call(remotePeerId, audioManager.getLocalStream(), {
+                    metadata: {
+                        audioOnly: true,
+                        sampleRate: audioManager.sampleRate,
+                        bufferSize: audioManager.bufferSize
+                    },
+                    sdpTransform: (sdp) => {
+                        // Ensure audio is prioritized and not disabled
+                        return sdp.replace(/(m=audio.*\r\n)/g, '$1a=mid:0\r\na=priority:high\r\n');
+                    }
+                });
+                
                 this.calls[remotePeerId] = call;
                 
                 // Handle the call events
                 call.on('stream', (remoteStream) => {
                     utils.log(`Received remote stream from: ${remotePeerId}`);
-                    audioManager.processRemoteStream(remoteStream, remotePeerId);
+                    
+                    // Log detailed info about received tracks
+                    const audioTracks = remoteStream.getAudioTracks();
+                    utils.log(`Remote stream has ${audioTracks.length} audio tracks`);
+                    
+                    audioTracks.forEach((track, index) => {
+                        utils.log(`Track ${index} - enabled: ${track.enabled}, muted: ${track.muted}, readyState: ${track.readyState}`);
+                        
+                        // Ensure tracks are enabled
+                        if (!track.enabled) {
+                            utils.log(`Enabling disabled track ${index}`);
+                            track.enabled = true;
+                        }
+                    });
+                    
+                    // Ensure audio context is resumed
+                    if (audioManager.audioContext && audioManager.audioContext.state !== 'running') {
+                        utils.log(`Resuming suspended audio context (state: ${audioManager.audioContext.state})`);
+                        audioManager.audioContext.resume().then(() => {
+                            utils.log(`Audio context resumed successfully, now: ${audioManager.audioContext.state}`);
+                            this.forceAudioProcess(remoteStream, remotePeerId);
+                        });
+                    } else {
+                        this.forceAudioProcess(remoteStream, remotePeerId);
+                    }
+                    
                     resolve(call);
                 });
                 
@@ -200,7 +236,9 @@ class PeerManager {
             utils.$('#connectionStatus').textContent = `Status: Connected to ${conn.peer}`;
             
             // Start latency monitoring
-            latencyMonitor.startMonitoring(conn.peer, conn);
+            if (window.latencyMonitor) {
+                latencyMonitor.startMonitoring(conn.peer, conn);
+            }
             
             // Send audio settings
             conn.send({
@@ -241,13 +279,42 @@ class PeerManager {
         // Store the call
         this.calls[call.peer] = call;
         
-        // Answer the call with our local stream
-        call.answer(audioManager.getLocalStream());
+        // Answer the call with our local stream and explicit constraints
+        call.answer(audioManager.getLocalStream(), {
+            sdpTransform: (sdp) => {
+                // Ensure audio is prioritized and not disabled
+                return sdp.replace(/(m=audio.*\r\n)/g, '$1a=mid:0\r\na=priority:high\r\n');
+            }
+        });
         
         // Handle the incoming stream
         call.on('stream', (remoteStream) => {
             utils.log(`Received remote stream from: ${call.peer}`);
-            audioManager.processRemoteStream(remoteStream, call.peer);
+            
+            // Log detailed info about received tracks
+            const audioTracks = remoteStream.getAudioTracks();
+            utils.log(`Remote stream has ${audioTracks.length} audio tracks`);
+            
+            audioTracks.forEach((track, index) => {
+                utils.log(`Track ${index} - enabled: ${track.enabled}, muted: ${track.muted}, readyState: ${track.readyState}`);
+                
+                // Ensure tracks are enabled
+                if (!track.enabled) {
+                    utils.log(`Enabling disabled track ${index}`);
+                    track.enabled = true;
+                }
+            });
+            
+            // Ensure audio context is resumed
+            if (audioManager.audioContext && audioManager.audioContext.state !== 'running') {
+                utils.log(`Resuming suspended audio context (state: ${audioManager.audioContext.state})`);
+                audioManager.audioContext.resume().then(() => {
+                    utils.log(`Audio context resumed successfully, now: ${audioManager.audioContext.state}`);
+                    this.forceAudioProcess(remoteStream, call.peer);
+                });
+            } else {
+                this.forceAudioProcess(remoteStream, call.peer);
+            }
         });
         
         call.on('error', (err) => {
@@ -258,6 +325,230 @@ class PeerManager {
             utils.log(`Call with ${call.peer} closed`);
             this.handlePeerDisconnection(call.peer);
         });
+    }
+    
+    /**
+     * New method to force proper audio processing - Add this method to the PeerManager class
+     * @param {MediaStream} remoteStream The remote audio stream
+     * @param {string} peerId The ID of the remote peer
+     */
+    forceAudioProcess(remoteStream, peerId) {
+        utils.log(`Forcing audio processing for peer: ${peerId}`);
+        
+        // First remove any existing stream for this peer
+        if (audioManager.remoteStreams[peerId]) {
+            try {
+                if (audioManager.remoteStreams[peerId].source) {
+                    audioManager.remoteStreams[peerId].source.disconnect();
+                }
+                if (audioManager.remoteStreams[peerId].gain) {
+                    audioManager.remoteStreams[peerId].gain.disconnect();
+                }
+            } catch (e) {
+                utils.log(`Error cleaning up old stream: ${e.message}`);
+            }
+        }
+        
+        // Create a working HTML5 audio element as a fallback/parallel path
+        try {
+            const audioEl = document.createElement('audio');
+            audioEl.id = `audio-fallback-${peerId}`;
+            audioEl.style.display = 'none';
+            audioEl.srcObject = remoteStream;
+            audioEl.autoplay = true;
+            document.body.appendChild(audioEl);
+            
+            audioEl.onloadedmetadata = () => {
+                utils.log(`Audio element ready for peer ${peerId}, playing...`);
+                audioEl.play().catch(e => utils.log(`Error playing audio: ${e.message}`));
+            };
+            utils.log(`Created fallback audio element for peer ${peerId}`);
+        } catch (e) {
+            utils.log(`Error creating fallback audio element: ${e.message}`);
+        }
+        
+        // Process through Web Audio API as well
+        try {
+            // We need to ensure the audio context is running
+            if (audioManager.audioContext.state !== 'running') {
+                utils.log(`Audio context still not running, attempting user interaction fix`);
+                
+                // Create and trigger a silent audio context - this can help with autoplay policies
+                const silentContext = new (window.AudioContext || window.webkitAudioContext)();
+                const silentBuffer = silentContext.createBuffer(1, 1, 22050);
+                const silentSource = silentContext.createBufferSource();
+                silentSource.buffer = silentBuffer;
+                silentSource.connect(silentContext.destination);
+                silentSource.start();
+                
+                // Now try to resume our main context again
+                setTimeout(() => {
+                    audioManager.audioContext.resume().then(() => {
+                        utils.log(`Audio context resumed after silent sound`);
+                        audioManager.processRemoteStream(remoteStream, peerId);
+                        
+                        // Force an update to the UI
+                        setTimeout(() => {
+                            const remoteMeter = utils.$(`#remoteMeter-${peerId}`);
+                            if (remoteMeter) {
+                                remoteMeter.value = 10; // Set a non-zero value to show activity
+                                setTimeout(() => {
+                                    remoteMeter.value = 0; // Reset back
+                                }, 300);
+                            }
+                        }, 500);
+                    });
+                }, 200);
+            } else {
+                // Normal processing path
+                audioManager.processRemoteStream(remoteStream, peerId);
+            }
+        } catch (e) {
+            utils.log(`Error in forceAudioProcess: ${e.message}`);
+        }
+        
+        // Set a verification check after a delay
+        setTimeout(() => {
+            this.verifyAudioConnection(peerId);
+        }, 2000);
+    }
+    
+    /**
+     * New method to verify audio is working
+     * @param {string} peerId The ID of the remote peer
+     */
+    verifyAudioConnection(peerId) {
+        utils.log(`Verifying audio connection for peer: ${peerId}`);
+        
+        // Check if stream exists
+        const remoteInfo = audioManager.remoteStreams[peerId];
+        if (!remoteInfo) {
+            utils.log(`Remote stream info not found for peer ${peerId}`);
+            return;
+        }
+        
+        // Check audio tracks
+        if (remoteInfo.stream) {
+            const audioTracks = remoteInfo.stream.getAudioTracks();
+            if (audioTracks.length === 0) {
+                utils.log(`WARNING: No audio tracks in remote stream for peer ${peerId}`);
+                return;
+            }
+            
+            // Check track status
+            audioTracks.forEach((track, index) => {
+                if (!track.enabled || track.muted || track.readyState !== 'live') {
+                    utils.log(`WARNING: Track ${index} has issues - enabled: ${track.enabled}, muted: ${track.muted}, state: ${track.readyState}`);
+                    
+                    // Try to fix track
+                    track.enabled = true;
+                }
+            });
+        }
+        
+        // Check audio context state again
+        if (audioManager.audioContext && audioManager.audioContext.state !== 'running') {
+            utils.log(`WARNING: Audio context still not running! State: ${audioManager.audioContext.state}`);
+            
+            // Request user to interact with the page
+            utils.showNotification(
+                'Audio playback blocked. Please click anywhere on the page to enable audio.',
+                'info'
+            );
+        }
+        
+        // Check if fallback audio element exists and is playing
+        const fallbackEl = document.getElementById(`audio-fallback-${peerId}`);
+        if (fallbackEl) {
+            utils.log(`Fallback audio element status - paused: ${fallbackEl.paused}, muted: ${fallbackEl.muted}, readyState: ${fallbackEl.readyState}`);
+            
+            if (fallbackEl.paused) {
+                utils.log(`Attempting to restart fallback audio playback`);
+                fallbackEl.play().catch(e => utils.log(`Error playing fallback audio: ${e.message}`));
+            }
+        }
+        
+        // Check audio nodes
+        if (remoteInfo.source && remoteInfo.gain && remoteInfo.analyser) {
+            utils.log(`Audio nodes exist for peer ${peerId}`);
+            
+            // Check analyzer data to see if we're getting any signal
+            if (remoteInfo.analyser && remoteInfo.dataArray) {
+                remoteInfo.analyser.getByteFrequencyData(remoteInfo.dataArray);
+                const sum = Array.from(remoteInfo.dataArray).reduce((a, b) => a + b, 0);
+                const avg = sum / remoteInfo.dataArray.length;
+                
+                utils.log(`Remote audio level: ${avg.toFixed(2)}`);
+                if (avg < 1) {
+                    utils.log(`WARNING: No audio signal detected from peer ${peerId}`);
+                    
+                    // Try reconnecting audio nodes
+                    try {
+                        remoteInfo.source.disconnect();
+                        remoteInfo.gain.disconnect();
+                        
+                        remoteInfo.source.connect(remoteInfo.analyser);
+                        remoteInfo.source.connect(remoteInfo.gain);
+                        remoteInfo.gain.connect(audioManager.audioContext.destination);
+                        
+                        utils.log(`Reconnected audio nodes for peer ${peerId}`);
+                    } catch (e) {
+                        utils.log(`Error reconnecting audio nodes: ${e.message}`);
+                    }
+                }
+            }
+        } else {
+            utils.log(`WARNING: Audio nodes missing for peer ${peerId}`);
+        }
+        
+        // Add a fix button to the UI
+        this.addFixAudioButton(peerId);
+    }
+    
+    /**
+     * New method to add an emergency fix button
+     * @param {string} peerId The ID of the remote peer
+     */
+    addFixAudioButton(peerId) {
+        const peerItem = utils.$(`#peer-${peerId}`);
+        if (!peerItem) return;
+        
+        // Check if button already exists
+        if (utils.$(`#fix-audio-${peerId}`)) return;
+        
+        const fixBtn = document.createElement('button');
+        fixBtn.id = `fix-audio-${peerId}`;
+        fixBtn.textContent = 'Fix Audio';
+        fixBtn.className = 'small-button';
+        fixBtn.style.backgroundColor = '#cf6679';
+        fixBtn.style.marginLeft = '5px';
+        
+        fixBtn.addEventListener('click', () => {
+            utils.log(`Manual audio fix requested for peer ${peerId}`);
+            
+            // Try to resume audio context first
+            if (audioManager.audioContext) {
+                audioManager.audioContext.resume().then(() => {
+                    utils.log(`Audio context resumed by user action`);
+                });
+            }
+            
+            // Try to play fallback audio
+            const fallbackEl = document.getElementById(`audio-fallback-${peerId}`);
+            if (fallbackEl) {
+                fallbackEl.play().catch(e => utils.log(`Error playing fallback audio: ${e.message}`));
+            }
+            
+            // Force stream reprocessing if we have the stream
+            const call = this.calls[peerId];
+            if (call && call.remoteStream) {
+                this.forceAudioProcess(call.remoteStream, peerId);
+            } else {
+                utils.log(`Cannot find remote stream for peer ${peerId}`);
+            }
+        });
+        
+        peerItem.appendChild(fixBtn);
     }
     
     /**
@@ -276,7 +567,9 @@ class PeerManager {
         }
         
         // Stop latency monitoring
-        latencyMonitor.stopMonitoring(peerId);
+        if (window.latencyMonitor) {
+            latencyMonitor.stopMonitoring(peerId);
+        }
         
         // Remove from audio manager
         audioManager.removeRemoteStream(peerId);

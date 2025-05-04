@@ -125,5 +125,83 @@
     <script src="js/peer-manager.js"></script>
     <script src="js/ui-controller.js"></script>
     <script src="js/main.js"></script>
+
+
+    <!-- Audio Debug Panel - Add before closing body tag -->
+    <div id="audio-debug-panel" style="display: none; position: fixed; bottom: 0; right: 0; width: 300px; background-color: #1e1e1e; border: 1px solid #444; padding: 10px; z-index: 9999;">
+        <h3>Audio Debug</h3>
+        <button id="force-audio-btn" style="width: 100%; margin-bottom: 5px;">Force Enable Audio</button>
+        <button id="restart-audio-btn" style="width: 100%; margin-bottom: 5px;">Restart Audio Processing</button>
+        <button id="check-connections-btn" style="width: 100%; margin-bottom: 5px;">Check Connections</button>
+        <div id="audio-debug-log" style="height: 100px; overflow-y: auto; background-color: #121212; padding: 5px; margin-top: 5px; font-family: monospace; font-size: 11px;"></div>
+    </div>
+
+    <script>
+        // Debug panel toggle with Alt+D
+        document.addEventListener('keydown', (e) => {
+            if (e.altKey && e.key === 'd') {
+                const panel = document.getElementById('audio-debug-panel');
+                panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+            }
+        });
+        
+        // Debug panel buttons
+        document.getElementById('force-audio-btn').addEventListener('click', () => {
+            if (window.audioManager) {
+                const result = window.audioManager.forceEnableAudio();
+                logDebug(`Force enable result: ${result}`);
+            }
+        });
+        
+        document.getElementById('restart-audio-btn').addEventListener('click', () => {
+            if (window.audioManager) {
+                // Restart meter updates
+                if (window.audioManager.meterUpdateInterval) {
+                    cancelAnimationFrame(window.audioManager.meterUpdateInterval);
+                    window.audioManager.meterUpdateInterval = null;
+                }
+                window.audioManager.startMeterUpdates();
+                logDebug('Audio meter updates restarted');
+            }
+        });
+        
+        document.getElementById('check-connections-btn').addEventListener('click', () => {
+            if (window.peerManager) {
+                const peers = window.peerManager.getConnectedPeers();
+                logDebug(`Connected peers: ${peers.length}`);
+                
+                peers.forEach(peerId => {
+                    logDebug(`Checking peer ${peerId}...`);
+                    const call = window.peerManager.calls[peerId];
+                    if (call && call.peerConnection) {
+                        logDebug(`PeerConnection state: ${call.peerConnection.connectionState}`);
+                        logDebug(`ICE state: ${call.peerConnection.iceConnectionState}`);
+                    }
+                    
+                    if (window.audioManager && window.audioManager.remoteStreams[peerId]) {
+                        const remoteInfo = window.audioManager.remoteStreams[peerId];
+                        if (remoteInfo.stream) {
+                            const tracks = remoteInfo.stream.getTracks();
+                            logDebug(`Remote tracks: ${tracks.length}`);
+                            tracks.forEach((track, i) => {
+                                logDebug(`Track ${i}: ${track.kind}, enabled=${track.enabled}`);
+                            });
+                        }
+                    }
+                });
+            }
+        });
+        
+        function logDebug(message) {
+            const log = document.getElementById('audio-debug-log');
+            const entry = document.createElement('div');
+            entry.textContent = message;
+            log.appendChild(entry);
+            log.scrollTop = log.scrollHeight;
+            console.log(message);
+        }
+    </script>
+    <!-- End of Debug Panel -->
+
 </body>
 </html>

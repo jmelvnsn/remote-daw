@@ -1,4 +1,121 @@
 /**
+ * Browser AutoPlay Policy Fix
+ * 
+ * Add this code to the beginning of main.js to ensure audio can play
+ * without requiring user interaction first.
+ */
+
+// Initialize audio autoplay policy fix
+document.addEventListener('DOMContentLoaded', () => {
+    // Create a container for the autoplay message
+    const autoplayContainer = document.createElement('div');
+    autoplayContainer.id = 'autoplay-fix-container';
+    autoplayContainer.style.position = 'fixed';
+    autoplayContainer.style.top = '0';
+    autoplayContainer.style.left = '0';
+    autoplayContainer.style.width = '100%';
+    autoplayContainer.style.backgroundColor = 'rgba(45, 45, 45, 0.9)';
+    autoplayContainer.style.color = '#e0e0e0';
+    autoplayContainer.style.padding = '15px';
+    autoplayContainer.style.textAlign = 'center';
+    autoplayContainer.style.zIndex = '9999';
+    autoplayContainer.style.display = 'none';
+    
+    autoplayContainer.innerHTML = `
+        <p>Audio playback requires user interaction. Please click the button below:</p>
+        <button id="enable-audio-btn" style="background-color: #03dac6; color: #121212; border: none; padding: 10px 15px; border-radius: 5px; cursor: pointer; font-weight: bold;">Enable Audio</button>
+    `;
+    
+    document.body.appendChild(autoplayContainer);
+    
+    // Function to check and fix audio context
+    const checkAudioContext = () => {
+        // Only show if we have an audio context and it's suspended
+        if (window.audioManager && 
+            window.audioManager.audioContext && 
+            window.audioManager.audioContext.state === 'suspended') {
+            
+            autoplayContainer.style.display = 'block';
+            
+            // Log the issue
+            console.log('Audio context is suspended. User interaction required.');
+        } else {
+            autoplayContainer.style.display = 'none';
+        }
+    };
+    
+    // Add event listener to the enable audio button
+    document.addEventListener('click', function enableAudioHandler() {
+        // Check if the button exists yet
+        const enableAudioBtn = document.getElementById('enable-audio-btn');
+        if (enableAudioBtn) {
+            enableAudioBtn.addEventListener('click', () => {
+                // Try to resume the audio context
+                if (window.audioManager && window.audioManager.audioContext) {
+                    window.audioManager.audioContext.resume().then(() => {
+                        console.log(`Audio context resumed: ${window.audioManager.audioContext.state}`);
+                        autoplayContainer.style.display = 'none';
+                        
+                        // Create a silent sound to fully unlock audio
+                        const silentContext = new (window.AudioContext || window.webkitAudioContext)();
+                        const buffer = silentContext.createBuffer(1, 1, 22050);
+                        const source = silentContext.createBufferSource();
+                        source.buffer = buffer;
+                        source.connect(silentContext.destination);
+                        source.start();
+                        
+                        // Also try to play any fallback audio elements
+                        document.querySelectorAll('audio[id^="audio-fallback-"]').forEach(audioEl => {
+                            audioEl.play().catch(e => console.log(`Failed to play fallback audio: ${e.message}`));
+                        });
+                        
+                        // Refresh all remote connections
+                        if (window.audioManager && window.peerManager) {
+                            const peers = window.peerManager.getConnectedPeers();
+                            console.log(`Refreshing ${peers.length} peer connections`);
+                            
+                            peers.forEach(peerId => {
+                                if (window.audioManager.remoteStreams[peerId] && 
+                                    window.audioManager.remoteStreams[peerId].stream) {
+                                    
+                                    console.log(`Reprocessing stream for peer ${peerId}`);
+                                    window.audioManager.processRemoteStream(
+                                        window.audioManager.remoteStreams[peerId].stream, 
+                                        peerId
+                                    );
+                                }
+                            });
+                        }
+                    });
+                }
+            });
+            
+            // Only need to set up this handler once
+            document.removeEventListener('click', enableAudioHandler);
+        }
+    });
+    
+    // Add event listener to any clicks on the document to attempt to resume audio context
+    document.addEventListener('click', () => {
+        if (window.audioManager && 
+            window.audioManager.audioContext && 
+            window.audioManager.audioContext.state === 'suspended') {
+            
+            window.audioManager.audioContext.resume().then(() => {
+                console.log(`Audio context resumed after click: ${window.audioManager.audioContext.state}`);
+                checkAudioContext(); // Hide the banner if successful
+            });
+        }
+    }, { once: true }); // Only need one click
+    
+    // Check periodically
+    setInterval(checkAudioContext, 5000);
+    
+    // Initial check after a delay
+    setTimeout(checkAudioContext, 1000);
+});
+
+/**
  * Main application file for DAW Collaboration Tool
  * Initializes the application and handles startup
  */
