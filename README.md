@@ -2,85 +2,122 @@
 
 A web-based peer-to-peer real-time audio collaboration tool that allows musicians to collaborate remotely using their Digital Audio Workstations (DAWs).
 
+## Overview
+
+This application enables musicians to collaborate remotely by creating a peer-to-peer connection for real-time audio streaming. Using WebRTC technology through the PeerJS library, it establishes low-latency audio connections between collaborators, making remote music production and jamming possible.
+
 ## Features
 
-- Real-time audio streaming between peers over WebRTC
-- Multi-user support for group collaboration sessions
-- Configurable audio settings (sample rate, buffer size, bit depth)
-- Visual audio level meters for local and remote streams
-- Real-time latency and jitter monitoring for connection quality assessment
-- Simple and intuitive UI for easy connection
-- Automated connection process using PeerJS
-- Live connection status and activity log
-- Audio troubleshooting tools and diagnostics
+- **Real-time audio streaming** between peers over WebRTC with minimal latency
+- **Multi-user support** for collaborative sessions with multiple musicians
+- **Configurable audio settings** (sample rate, buffer size, bit depth)
+- **Visual audio level meters** for monitoring local and remote streams
+- **Real-time latency and jitter monitoring** with color-coded quality indicators
+- **Simple session sharing** via URL links
+- **Browser-based solution** with no software installation required
+- **Automated connection management** using PeerJS
+- **Advanced debugging tools** for troubleshooting audio issues
+
+## Step-by-Step Signal Flow with Latency Identification
+
+```mermaid
+flowchart TB
+    %% Start with user setup
+    Start([User Opens App]) --> AudioSettings[Configure Audio Settings]
+    AudioSettings --> ConfigureDAW[Configure DAW Audio Output]
+    
+    %% DAW routing setup - Local Side
+    ConfigureDAW --> |Step 1: Send DAW audio| VirtualDevice[Virtual Audio Device<br>Loopback/BlackHole]
+    
+    %% First potential latency point
+    VirtualDevice --> |Step 2: Route to browser<br>⚠️ Latency Point 1:<br>Audio driver buffer| WebAudioCapture[Web Audio Capture]
+    
+    %% Audio processing in browser
+    WebAudioCapture --> |Step 3: Process audio| AudioContext[Audio Context<br>Processing]
+    
+    %% Second potential latency point
+    AudioContext --> |Step 4: Audio analysis<br>⚠️ Latency Point 2:<br>Browser buffer size| LocalMeters[Display Local<br>Audio Levels]
+    
+    %% Session establishment
+    Start --> InitPeerJS[Initialize PeerJS]
+    InitPeerJS --> |Step 5: Create or join session| PeerServer[PeerJS Server<br>Connection Broker]
+    
+    %% Third potential latency point
+    PeerServer --> |Step 6: Establish connection<br>⚠️ Latency Point 3:<br>Signaling latency| PeerConnection[WebRTC P2P Connection]
+    
+    %% Audio streaming
+    AudioContext --> |Step 7: Stream audio| PeerConnection
+    
+    %% Fourth and most significant latency point
+    PeerConnection --> |Step 8: Transmit audio<br>⚠️ Latency Point 4:<br>Network latency & jitter| RemotePeer[Remote Peer Connection]
+    
+    %% Receiving side
+    RemotePeer --> |Step 9: Decode audio<br>⚠️ Latency Point 5:<br>Decoding delay| RemoteAudioContext[Remote Audio Context]
+    
+    %% Fifth potential latency point
+    RemoteAudioContext --> |Step 10: Output audio<br>⚠️ Latency Point 6:<br>Output buffer| Speakers[Computer Speakers/Headphones]
+    RemoteAudioContext --> RemoteMeters[Display Remote<br>Audio Levels]
+    
+    %% Latency monitoring
+    PeerConnection --> |Step 11: Monitor quality| LatencyMonitor[Latency/Jitter<br>Monitoring]
+    LatencyMonitor --> |Step 12: Display stats| LatencyDisplay[Connection Quality<br>Display]
+    
+    %% Styling for clarity
+    classDef setup fill:#e3f2fd,stroke:#1565c0,stroke-width:2px
+    classDef audio fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
+    classDef network fill:#f3e5f5,stroke:#6a1b9a,stroke-width:2px
+    classDef latency fill:#ffebee,stroke:#c62828,stroke-width:2px,color:#d32f2f,font-weight:bold
+    
+    %% Apply styles
+    class Start,AudioSettings,ConfigureDAW,InitPeerJS setup
+    class VirtualDevice,WebAudioCapture,AudioContext,LocalMeters,RemoteAudioContext,RemoteMeters,Speakers audio
+    class PeerServer,PeerConnection,RemotePeer network
+    class LatencyMonitor,LatencyDisplay latency
+```
+
+### Latency Analysis in the Audio Collaboration Pipeline
+
+The DAW Collaboration Tool minimizes latency where possible, but several unavoidable latency points exist:
+
+1. **Audio Driver Buffer** (10-100ms): The virtual audio device adds latency based on buffer size settings
+   
+2. **Browser Buffer Size** (5-50ms): Web Audio API processing creates latency proportional to the chosen buffer size
+   
+3. **Signaling Latency** (50-500ms): One-time connection setup delay through PeerJS server
+   
+4. **Network Latency & Jitter** (20-200ms): The most significant variable factor, depends on:
+   - Internet connection quality
+   - Geographic distance between peers
+   - Network congestion
+   - Route efficiency
+   
+5. **Decoding Delay** (5-20ms): Time required to decode the received audio stream
+   
+6. **Output Buffer** (5-30ms): Final playback buffer adds small additional latency
+
+**Total End-to-End Latency Range**: ~45-900ms (under typical conditions: 80-150ms)
+
+The application's latency monitor continuously analyzes the connection quality and displays real-time metrics with color-coded indicators:
+- **Green**: Good (<50ms round-trip, <15ms jitter)
+- **Amber**: Moderate (<100ms round-trip, <30ms jitter)
+- **Red**: Poor (≥100ms round-trip or ≥30ms jitter)
 
 ## How It Works
 
-This application creates a peer-to-peer connection between two or more users, allowing them to share audio streams in real-time. The audio from each user's DAW is captured from their system's input and streamed to all connected peers.
+1. **Audio Routing**: Musicians route their DAW's audio output to a virtual audio device (like Loopback, BlackHole, VB-Cable, etc.)
+2. **Browser Capture**: The application captures this audio through the browser's Web Audio API
+3. **Peer Connection**: When a session is created, a unique session ID is generated through PeerJS
+4. **Audio Streaming**: WebRTC establishes a direct peer-to-peer connection for low-latency audio streaming
+5. **Real-time Monitoring**: Audio levels and network performance (latency/jitter) are constantly monitored
+6. **Playback**: Incoming audio from remote peers is played through the local computer's audio output
 
-### Signal Flow Diagram
+## Technical Stack
 
-```
-┌──────────────────────────────────────────────┐
-│                                              │
-│               Your Computer                  │
-│                                              │
-│  ┌──────────┐       ┌─────────────────────┐  │
-│  │          │       │                     │  │
-│  │   DAW    ├──────►│  Audio Routing Tool │  │
-│  │          │       │  (Loopback, etc.)   │  │
-│  └──────────┘       └──────────┬──────────┘  │
-│                                │             │
-│                                ▼             │
-│                      ┌───────────────────┐   │
-│                      │  Browser:         │   │
-│                      │  WebRTC & Web     │   │
-│                      │  Audio API        │   │
-│                      └─────────┬─────────┘   │
-│                                │             │
-└────────────────────────────────┼─────────────┘
-                                 │              
-                                 ▼              
-                     ┌───────────────────────┐  
-                     │   PeerJS Server       │  
-                     │   (Connection Broker) │  
-                     └─────────┬─────────────┘  
-                               │                
-                 ┌─────────────┴─────────────┐  
-                 │                           │  
-                 ▼                           ▼  
-┌──────────────────────────────┐  ┌──────────────────────────────┐
-│                              │  │                              │
-│       Peer Computer 1        │  │       Peer Computer 2        │
-│                              │  │                              │
-│  ┌──────────────────────┐    │  │    ┌──────────────────────┐  │
-│  │ Browser:             │    │  │    │ Browser:             │  │
-│  │ WebRTC & Web Audio   │    │  │    │ WebRTC & Web Audio   │  │
-│  └──────────┬───────────┘    │  │    └───────────┬──────────┘  │
-│             │                │  │                │             │
-│             ▼                │  │                ▼             │
-│  ┌────────────────────────┐  │  │  ┌────────────────────────┐  │
-│  │                        │  │  │  │                        │  │
-│  │ Computer Audio System  │  │  │  │ Computer Audio System  │  │
-│  │                        │  │  │  │                        │  │
-│  └────────────┬───────────┘  │  │  └───────────┬────────────┘  │
-│               │              │  │              │               │
-│               ▼              │  │              ▼               │
-│      ┌─────────────────┐     │  │     ┌─────────────────┐      │
-│      │                 │     │  │     │                 │      │
-│      │  DAW / Speakers │     │  │     │  DAW / Speakers │      │
-│      │                 │     │  │     │                 │      │
-│      └─────────────────┘     │  │     └─────────────────┘      │
-│                              │  │                              │
-└──────────────────────────────┘  └──────────────────────────────┘
-```
-
-### Technical Stack
-
-- **WebRTC**: For peer-to-peer audio streaming
-- **PeerJS**: Simplifies WebRTC connection establishment
-- **Web Audio API**: For audio processing and visualization
-- **HTML/CSS/JavaScript**: Front-end UI and application logic
+- **WebRTC**: Core technology for peer-to-peer audio streaming
+- **PeerJS**: Simplifies WebRTC connection establishment and session management
+- **Web Audio API**: Handles audio capturing, processing, and visualization
+- **JavaScript Modules**: Organized code structure for maintainability
+- **HTML/CSS**: Responsive UI designed for musicians' workflow
 
 ## Setup and Usage
 
@@ -88,8 +125,8 @@ This application creates a peer-to-peer connection between two or more users, al
 
 - A modern web browser with WebRTC support (Chrome, Firefox, Edge, Safari)
 - Audio routing software to send your DAW's output to your system's input:
-  - **macOS**: Loopback, Soundflower, BlackHole
-  - **Windows**: JACK Audio, VB-Cable, ASIO Link Pro
+  - **macOS**: Loopback, BlackHole, Soundflower
+  - **Windows**: VB-Cable, JACK Audio, ASIO Link Pro
   - **Linux**: JACK Audio, PulseAudio
 
 ### Running the Application
@@ -107,40 +144,6 @@ This application creates a peer-to-peer connection between two or more users, al
 2. Set your DAW's sample rate and buffer size to match the settings in the application
 3. Create a separate track in your DAW to monitor the incoming audio from your collaborators
 
-## Troubleshooting Audio Issues
-
-### Common Problems and Solutions
-
-1. **No audio is being sent or received**:
-   - Check that your DAW's output is properly routed to your system's input
-   - Ensure your browser has permission to access your audio input device
-   - Click the "Debug Audio" button to see detailed information about audio routing
-   - Press Alt+D to open the debug panel and click "Force Enable Audio"
-
-2. **Can hear audio but levels aren't showing**:
-   - Check that the audio level is high enough to register
-   - Click "Fix Audio Issues" button that appears next to the peer in the connected peers list
-   - In the debug panel (Alt+D), click "Restart Audio Processing"
-
-3. **Can see connection is established but no audio is coming through**:
-   - Browser autoplay policies may be blocking audio playback
-   - Click anywhere on the page to enable audio, or click the "Enable Audio" banner if it appears
-   - Try using the "Force Enable Audio" button in the debug panel
-
-4. **Latency display shows "Measuring latency..." but never updates**:
-   - Open the debug panel (Alt+D) and click "Fix Latency Display"
-   - Try refreshing the page and reconnecting
-   - Check browser console for any error messages
-
-### Advanced Debugging Tools
-
-The application includes several debugging tools to help diagnose and fix audio issues:
-
-1. **Debug Audio Button**: Shows detailed information about audio devices and connections
-2. **Debug UI Button**: Checks all UI elements are working properly
-3. **Debug Panel** (Alt+D): Provides advanced tools for fixing audio and connection issues
-4. **Fix Audio Issues**: Button that appears next to peer names when connection issues are detected
-
 ## Performance Considerations
 
 For the best collaboration experience:
@@ -148,22 +151,17 @@ For the best collaboration experience:
 - Use a wired internet connection when possible
 - Lower buffer sizes provide less latency but may introduce audio glitches
 - Higher buffer sizes provide more stability but increase latency
-- Consider using smaller sample rates (44.1 kHz) for better performance
-- The number of simultaneous users affects performance - 3-5 users is recommended
 - Latency values below 50ms are considered good for real-time collaboration
 - Jitter values below 15ms indicate a stable connection
 
-## Understanding Latency and Jitter
+## Troubleshooting
 
-The application measures and displays two important metrics for audio quality:
+The application includes several built-in tools for diagnosing and fixing audio issues:
 
-- **Latency**: The round-trip time (in milliseconds) for audio to travel from one peer to another and back. Lower values mean more responsive collaboration.
-- **Jitter**: The variation in latency (in milliseconds). Lower values indicate a more stable connection.
-
-The latency display is color-coded:
-- **Green**: Good connection (latency < 50ms, jitter < 15ms)
-- **Amber**: Moderate connection (latency < 100ms, jitter < 30ms)
-- **Red**: Poor connection (latency ≥ 100ms or jitter ≥ 30ms)
+- **Debug Panel** (Alt+D or visible debug button): Advanced tools for fixing audio and connection issues
+- **Audio Signal Verification**: Automatic detection of audio signal problems
+- **Connection Quality Monitoring**: Visual indicators of network performance
+- **Browser Console Logging**: Detailed diagnostic information
 
 ## Project Structure
 
@@ -187,31 +185,7 @@ daw-collaboration-app/
 - Browser security restrictions require HTTPS for accessing audio devices in production environments
 - Latency is dependent on network conditions and cannot match physical in-person collaboration
 - Audio quality may be affected by bandwidth limitations
-- Some browser-specific implementations may vary
 - Browser autoplay policies may require user interaction before audio can play
-
-## Future Enhancements
-
-Planned features for future versions:
-
-- Recording capabilities
-- More detailed audio visualization
-- Separate volume controls for each connected peer
-- Text chat functionality
-- Session persistence
-- MIDI data transmission
-- Multi-track mixing capabilities
-- Direct integration with popular DAWs
-
-## Troubleshooting Commands
-
-You can run these commands in the browser console for advanced troubleshooting:
-
-- `audioManager.forceEnableAudio()` - Forces audio playback to be enabled
-- `audioManager.fixRemoteAudioIssues()` - Rebuilds audio processing pipelines for all peers
-- `latencyMonitor.forcePingAll()` - Forces new latency measurements
-- `latencyMonitor.debugLatencyMonitor()` - Shows detailed latency statistics
-- `UIController.debugUI()` - Logs detailed information about UI elements
 
 ## License
 
