@@ -1,11 +1,12 @@
 /**
  * Simplified Latency Monitor for DAW Collaboration Tool
- * Uses WebRTC statistics instead of ping/pong messages
+ * Uses WebRTC statistics and bi-directional sharing instead of ping/pong messages
  */
 
 class LatencyMonitor {
     constructor() {
         this.statsIntervals = {}; // Store interval IDs by peer ID
+        this.shareIntervals = {}; // Store sharing interval IDs by peer ID
         this.latencyHistory = {}; // Store latency history for each peer
         this.historyLength = 10; // Number of readings to keep in history
         this.updateInterval = 2000; // Update every 2 seconds (ms)
@@ -14,11 +15,15 @@ class LatencyMonitor {
     /**
      * Start monitoring latency for a peer
      * @param {string} peerId The peer ID to monitor
-     * @param {DataConnection} connection The peer connection (not used in this implementation)
+     * @param {DataConnection} connection The peer connection
      */
     startMonitoring(peerId, connection) {
         if (this.statsIntervals[peerId]) {
             clearInterval(this.statsIntervals[peerId]);
+        }
+        
+        if (this.shareIntervals && this.shareIntervals[peerId]) {
+            clearInterval(this.shareIntervals[peerId]);
         }
         
         utils.log(`Starting latency monitoring for peer: ${peerId}`);
@@ -36,6 +41,9 @@ class LatencyMonitor {
             this.updateLatencyStats(peerId);
         }, 100);
         
+        // Start bi-directional statistics sharing
+        this.startStatisticsSharing(peerId, connection);
+        
         return true;
     }
     
@@ -49,6 +57,84 @@ class LatencyMonitor {
             delete this.statsIntervals[peerId];
             delete this.latencyHistory[peerId];
             utils.log(`Stopped latency monitoring for peer: ${peerId}`);
+        }
+    }
+    
+    /**
+     * Start sharing statistics with a peer
+     * @param {string} peerId The peer ID
+     * @param {DataConnection} connection The data connection
+     */
+    startStatisticsSharing(peerId, connection) {
+        console.log(`Starting statistics sharing with peer ${peerId}`);
+        
+        // Set up interval to send our statistics to the peer
+        const shareInterval = setInterval(() => {
+            if (!connection || !connection.open) {
+                clearInterval(shareInterval);
+                return;
+            }
+            
+            // Get our calculated stats for this peer
+            const stats = this.calculateLatencyStats(peerId);
+            
+            // Create a stats message
+            const statsMessage = {
+                type: 'connection-stats',
+                stats: {
+                    rtt: stats.rtt,
+                    jitter: stats.jitter
+                },
+                timestamp: Date.now()
+            };
+            
+            // Send the stats
+            try {
+                connection.send(statsMessage);
+                console.log(`Sent stats to peer ${peerId}: RTT=${stats.rtt}ms, Jitter=${stats.jitter}ms`);
+            } catch (err) {
+                console.error(`Error sending stats to peer ${peerId}:`, err);
+            }
+        }, 2000); // Send every 2 seconds
+        
+        // Store the interval
+        this.shareIntervals = this.shareIntervals || {};
+        this.shareIntervals[peerId] = shareInterval;
+        
+        // Set up data handler for stats messages
+        this.setupStatsHandler(peerId, connection);
+    }
+    
+    /**
+     * Set up handler for statistics messages
+     * @param {string} peerId The peer ID
+     * @param {DataConnection} connection The data connection
+     */
+    setupStatsHandler(peerId, connection) {
+        // Create a data message handler function
+        const handleStatsMessage = (data) => {
+            // Only process connection-stats messages
+            if (data && data.type === 'connection-stats') {
+                console.log(`Received stats from peer ${peerId}:`, data.stats);
+                
+                // Use received stats to update our display
+                this.updateLatencyDisplayWithRemoteStats(peerId, data.stats);
+            }
+        };
+        
+        // Add our handler to the connection's data event
+        connection.on('data', handleStatsMessage);
+    }
+    
+    /**
+     * Stop statistics sharing with a peer
+     * @param {string} peerId The peer ID to stop sharing with
+     */
+    stopStatisticsSharing(peerId) {
+        if (this.shareIntervals && this.shareIntervals[peerId]) {
+            clearInterval(this.shareIntervals[peerId]);
+            delete this.shareIntervals[peerId];
+            console.log(`Stopped statistics sharing with peer ${peerId}`);
         }
     }
     
@@ -201,6 +287,33 @@ class LatencyMonitor {
     }
     
     /**
+     * Update latency display with stats received from the remote peer
+     * @param {string} peerId The peer ID
+     * @param {Object} stats The stats object with rtt and jitter
+     */
+    updateLatencyDisplayWithRemoteStats(peerId, stats) {
+        const qualityLevel = this.getLatencyQuality(stats.rtt, stats.jitter);
+        
+        // Find the latency info element
+        const latencyEl = document.getElementById(`latency-${peerId}`);
+        
+        if (latencyEl) {
+            // Update text and class
+            latencyEl.textContent = `Latency: ${stats.rtt}ms | Jitter: ${stats.jitter}ms`;
+            
+            // Remove all quality classes
+            latencyEl.classList.remove('latency-good', 'latency-medium', 'latency-poor');
+            
+            // Add the current quality class
+            latencyEl.classList.add(`latency-${qualityLevel}`);
+            
+            console.log(`Updated latency display for ${peerId} with remote stats`);
+        } else {
+            console.log(`Latency element not found for peer ${peerId}`);
+        }
+    }
+    
+    /**
      * Update latency display with fallback values
      * @param {string} peerId The peer ID
      */
@@ -269,6 +382,7 @@ class LatencyMonitor {
     debugLatencyMonitor() {
         console.log("=== Latency Monitor Debug Info ===");
         console.log("Active monitoring intervals:", Object.keys(this.statsIntervals).length);
+        console.log("Active sharing intervals:", Object.keys(this.shareIntervals || {}).length);
         
         // Log history for each peer
         console.log("Latency History:");
@@ -292,12 +406,18 @@ class LatencyMonitor {
             
             // Check if we're monitoring all connected peers
             for (const peerId of connectedPeers) {
-                console.log(`- Peer ${peerId}: monitoring=${!!this.statsIntervals[peerId]}`);
+                console.log(`- Peer ${peerId}: monitoring=${!!this.statsIntervals[peerId]}, sharing=${!!(this.shareIntervals && this.shareIntervals[peerId])}`);
                 
                 // If not monitoring, start now
                 if (!this.statsIntervals[peerId]) {
                     console.log(`  Not monitoring peer ${peerId}, starting now`);
-                    this.startMonitoring(peerId);
+                    this.startMonitoring(peerId, window.peerManager.connections[peerId]);
+                }
+                
+                // If not sharing, start now
+                if (!(this.shareIntervals && this.shareIntervals[peerId])) {
+                    console.log(`  Not sharing stats with peer ${peerId}, starting now`);
+                    this.startStatisticsSharing(peerId, window.peerManager.connections[peerId]);
                 }
             }
         }
