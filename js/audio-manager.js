@@ -233,6 +233,14 @@ class AudioManager {
      */
     processRemoteStream(remoteStream, peerId) {
         try {
+            console.log(`Processing remote stream from peer: ${peerId}`);
+            
+            // Ensure audio context exists
+            if (!this.audioContext) {
+                console.error('Audio context not available when processing remote stream');
+                return;
+            }
+            
             // Set up audio processing for remote audio
             const remoteSource = this.audioContext.createMediaStreamSource(remoteStream);
             
@@ -240,6 +248,9 @@ class AudioManager {
             const analyser = this.audioContext.createAnalyser();
             analyser.fftSize = 256;
             remoteSource.connect(analyser);
+            
+            // Create data array for this analyser
+            const dataArray = new Uint8Array(analyser.frequencyBinCount);
             
             // Connect to audio output
             const remoteGain = this.audioContext.createGain();
@@ -253,16 +264,69 @@ class AudioManager {
                 source: remoteSource,
                 analyser: analyser,
                 gain: remoteGain,
-                dataArray: new Uint8Array(analyser.frequencyBinCount)
+                dataArray: dataArray
             };
             
             // Create or update meter element for this peer
             UIController.createRemoteMeter(peerId);
             
-            utils.log(`Processing remote stream from: ${peerId}`);
+            // Log a confirmation that remote stream is being processed
+            console.log(`Remote stream from ${peerId} configured successfully`);
+            console.log(`Remote stream tracks:`, remoteStream.getTracks().length);
+            remoteStream.getTracks().forEach((track, i) => {
+                console.log(`Track ${i}: kind=${track.kind}, enabled=${track.enabled}, muted=${track.muted}`);
+            });
+            
+            // Directly check remote stream levels to confirm
+            setTimeout(() => {
+                this.checkRemoteStreamLevels(peerId);
+            }, 1000);
             
         } catch (error) {
-            utils.log(`Error processing remote stream: ${error.message}`);
+            console.error(`Error processing remote stream: ${error.message}`);
+            console.error(error.stack);
+        }
+    }
+    
+    /**
+     * Check the remote stream audio levels to verify it's working
+     * @param {string} peerId The ID of the remote peer
+     */
+    checkRemoteStreamLevels(peerId) {
+        if (!this.remoteStreams[peerId]) {
+            console.log(`No remote stream info found for peer ${peerId}`);
+            return;
+        }
+        
+        const remoteInfo = this.remoteStreams[peerId];
+        
+        // Get the current audio data
+        remoteInfo.analyser.getByteFrequencyData(remoteInfo.dataArray);
+        
+        // Calculate average level
+        const sum = Array.from(remoteInfo.dataArray).reduce((a, b) => a + b, 0);
+        const avg = sum / remoteInfo.dataArray.length;
+        
+        // Log the level
+        console.log(`Remote audio level from ${peerId}: ${avg.toFixed(2)}`);
+        
+        // If level is very low, log a warning
+        if (avg < 1) {
+            console.warn(`WARNING: Very low or no signal detected from peer ${peerId}`);
+            console.warn('Possible issues:');
+            console.warn('1. The remote peer may not be sending audio');
+            console.warn('2. The audio connection may be interrupted');
+            console.warn('3. The analyzer may not be properly connected');
+        } else {
+            console.log(`Audio signal detected from peer ${peerId} - levels are good!`);
+        }
+        
+        // Check if the meter element exists and is updating
+        const meterElement = utils.$(`#remoteMeter-${peerId}`);
+        if (meterElement) {
+            console.log(`Remote meter element exists for ${peerId}, current value: ${meterElement.value}`);
+        } else {
+            console.warn(`Remote meter element for ${peerId} not found in DOM`);
         }
     }
     
@@ -278,6 +342,7 @@ class AudioManager {
                 this.remoteStreams[peerId].gain.disconnect();
             } catch (e) {
                 // Nodes might already be disconnected
+                console.log(`Note: Error disconnecting nodes for peer ${peerId}: ${e.message}`);
             }
             
             // Remove from tracking
@@ -294,10 +359,13 @@ class AudioManager {
      * Start updating the audio level meters
      */
     startMeterUpdates() {
+        console.log('Starting meter updates');
+        
         const updateMeters = () => {
             const localMeter = utils.$('#localMeter');
             
-            if (this.analyserLocal) {
+            // Update local meter
+            if (this.analyserLocal && this.localDataArray) {
                 this.analyserLocal.getByteFrequencyData(this.localDataArray);
                 const localVolume = utils.calculateVolume(this.localDataArray);
                 localMeter.value = localVolume;
@@ -306,10 +374,20 @@ class AudioManager {
             // Update each remote meter
             for (const peerId in this.remoteStreams) {
                 const remoteMeter = utils.$(`#remoteMeter-${peerId}`);
-                if (remoteMeter && this.remoteStreams[peerId].analyser) {
-                    this.remoteStreams[peerId].analyser.getByteFrequencyData(this.remoteStreams[peerId].dataArray);
-                    const remoteVolume = utils.calculateVolume(this.remoteStreams[peerId].dataArray);
+                const remoteInfo = this.remoteStreams[peerId];
+                
+                if (remoteMeter && remoteInfo && remoteInfo.analyser && remoteInfo.dataArray) {
+                    // Get the current audio data
+                    remoteInfo.analyser.getByteFrequencyData(remoteInfo.dataArray);
+                    const remoteVolume = utils.calculateVolume(remoteInfo.dataArray);
+                    
+                    // Update the meter
                     remoteMeter.value = remoteVolume;
+                    
+                    // Debug log if level is significant (to avoid log spam)
+                    if (remoteVolume > 10) {
+                        console.log(`Remote volume from ${peerId}: ${remoteVolume}`);
+                    }
                 }
             }
             
@@ -317,6 +395,7 @@ class AudioManager {
         };
         
         updateMeters();
+        console.log('Meter update loop started');
     }
     
     /**
@@ -428,6 +507,106 @@ class AudioManager {
             oscillator.stop();
             utils.log('Test tone finished. Did you hear a beep?');
         }, 1000);
+        
+        // Debug remote stream information
+        utils.log('Checking remote stream information...');
+        for (const peerId in this.remoteStreams) {
+            utils.log(`Remote stream from peer ${peerId}:`);
+            
+            const remoteInfo = this.remoteStreams[peerId];
+            if (remoteInfo.stream) {
+                const remoteTracks = remoteInfo.stream.getTracks();
+                utils.log(`- Remote tracks: ${remoteTracks.length}`);
+                
+                remoteTracks.forEach((track, i) => {
+                    utils.log(`- Track ${i}: kind=${track.kind}, enabled=${track.enabled}, muted=${track.muted}`);
+                });
+                
+                if (remoteInfo.analyser && remoteInfo.dataArray) {
+                    remoteInfo.analyser.getByteFrequencyData(remoteInfo.dataArray);
+                    const remoteSum = Array.from(remoteInfo.dataArray).reduce((a, b) => a + b, 0);
+                    const remoteAvg = remoteSum / remoteInfo.dataArray.length;
+                    
+                    utils.log(`- Remote audio level: ${remoteAvg.toFixed(2)}`);
+                    if (remoteAvg < 1) {
+                        utils.log('- WARNING: No remote audio signal detected');
+                    }
+                } else {
+                    utils.log('- WARNING: Remote analyser not set up properly');
+                }
+            } else {
+                utils.log('- WARNING: No remote stream found');
+            }
+            
+            // Check if remote meter exists
+            const remoteMeter = utils.$(`#remoteMeter-${peerId}`);
+            utils.log(`- Remote meter in DOM: ${!!remoteMeter}`);
+            if (remoteMeter) {
+                utils.log(`- Remote meter value: ${remoteMeter.value}`);
+            }
+        }
+    }
+    
+    /**
+     * Fix common audio issues with remote streams
+     */
+    fixRemoteAudioIssues() {
+        utils.log('Attempting to fix remote audio issues...');
+        
+        // For each remote stream
+        for (const peerId in this.remoteStreams) {
+            const remoteInfo = this.remoteStreams[peerId];
+            utils.log(`Fixing connection for peer ${peerId}...`);
+            
+            try {
+                // Disconnect existing connections
+                if (remoteInfo.source) {
+                    try { remoteInfo.source.disconnect(); } catch (e) {}
+                }
+                if (remoteInfo.gain) {
+                    try { remoteInfo.gain.disconnect(); } catch (e) {}
+                }
+                
+                // Recreate connections
+                if (remoteInfo.stream && this.audioContext) {
+                    // Create new source node
+                    remoteInfo.source = this.audioContext.createMediaStreamSource(remoteInfo.stream);
+                    
+                    // Recreate analyser if needed
+                    if (!remoteInfo.analyser) {
+                        remoteInfo.analyser = this.audioContext.createAnalyser();
+                        remoteInfo.analyser.fftSize = 256;
+                        remoteInfo.dataArray = new Uint8Array(remoteInfo.analyser.frequencyBinCount);
+                    }
+                    
+                    // Create new gain node
+                    remoteInfo.gain = this.audioContext.createGain();
+                    remoteInfo.gain.gain.value = 1.0;
+                    
+                    // Connect everything
+                    remoteInfo.source.connect(remoteInfo.analyser);
+                    remoteInfo.source.connect(remoteInfo.gain);
+                    remoteInfo.gain.connect(this.audioContext.destination);
+                    
+                    utils.log(`Successfully rebuilt audio pipeline for peer ${peerId}`);
+                } else {
+                    utils.log(`Cannot fix audio for peer ${peerId} - missing stream or audio context`);
+                }
+            } catch (error) {
+                utils.log(`Error fixing audio for peer ${peerId}: ${error.message}`);
+            }
+        }
+        
+        // Restart meter updates
+        if (this.meterUpdateInterval) {
+            cancelAnimationFrame(this.meterUpdateInterval);
+            this.meterUpdateInterval = null;
+        }
+        
+        this.startMeterUpdates();
+        utils.log('Audio meter updates restarted');
+        
+        return Object.keys(this.remoteStreams).length > 0;
     }
 }
 
