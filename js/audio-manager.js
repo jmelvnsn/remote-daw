@@ -10,9 +10,7 @@ class AudioManager {
         this.localStream = null;
         this.localSource = null;
         this.analyserLocal = null;
-        this.analyserRemote = null;
         this.localDataArray = null;
-        this.remoteDataArray = null;
         this.remoteStreams = {};
         
         // Audio devices
@@ -102,7 +100,7 @@ class AudioManager {
             // Create audio context with selected sample rate
             this.audioContext = new (window.AudioContext || window.webkitAudioContext)({
                 sampleRate: this.sampleRate,
-                latencyHint: this.bufferSize === 256 ? "interactive" : "balanced"
+                latencyHint: this.bufferSize <= 256 ? "interactive" : "balanced"
             });
             
             // Get user media with selected device
@@ -258,11 +256,8 @@ class AudioManager {
                 dataArray: new Uint8Array(analyser.frequencyBinCount)
             };
             
-            // If this is the first remote stream, use its analyser for the meter
-            if (!this.analyserRemote) {
-                this.analyserRemote = analyser;
-                this.remoteDataArray = this.remoteStreams[peerId].dataArray;
-            }
+            // Create or update meter element for this peer
+            UIController.createRemoteMeter(peerId);
             
             utils.log(`Processing remote stream from: ${peerId}`);
             
@@ -288,15 +283,8 @@ class AudioManager {
             // Remove from tracking
             delete this.remoteStreams[peerId];
             
-            // If we removed the stream that was being used for the meter, find another one
-            if (Object.keys(this.remoteStreams).length > 0) {
-                const firstPeerId = Object.keys(this.remoteStreams)[0];
-                this.analyserRemote = this.remoteStreams[firstPeerId].analyser;
-                this.remoteDataArray = this.remoteStreams[firstPeerId].dataArray;
-            } else {
-                this.analyserRemote = null;
-                this.remoteDataArray = null;
-            }
+            // Remove the meter element for this peer
+            UIController.removeRemoteMeter(peerId);
             
             utils.log(`Removed remote stream from: ${peerId}`);
         }
@@ -308,7 +296,6 @@ class AudioManager {
     startMeterUpdates() {
         const updateMeters = () => {
             const localMeter = utils.$('#localMeter');
-            const remoteMeter = utils.$('#remoteMeter');
             
             if (this.analyserLocal) {
                 this.analyserLocal.getByteFrequencyData(this.localDataArray);
@@ -316,12 +303,14 @@ class AudioManager {
                 localMeter.value = localVolume;
             }
             
-            if (this.analyserRemote && this.remoteDataArray) {
-                this.analyserRemote.getByteFrequencyData(this.remoteDataArray);
-                const remoteVolume = utils.calculateVolume(this.remoteDataArray);
-                remoteMeter.value = remoteVolume;
-            } else {
-                remoteMeter.value = 0;
+            // Update each remote meter
+            for (const peerId in this.remoteStreams) {
+                const remoteMeter = utils.$(`#remoteMeter-${peerId}`);
+                if (remoteMeter && this.remoteStreams[peerId].analyser) {
+                    this.remoteStreams[peerId].analyser.getByteFrequencyData(this.remoteStreams[peerId].dataArray);
+                    const remoteVolume = utils.calculateVolume(this.remoteStreams[peerId].dataArray);
+                    remoteMeter.value = remoteVolume;
+                }
             }
             
             this.meterUpdateInterval = requestAnimationFrame(updateMeters);

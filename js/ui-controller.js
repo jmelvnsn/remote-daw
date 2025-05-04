@@ -28,6 +28,23 @@ class UIController {
         this.connectionStatus = utils.$('#connectionStatus');
         this.myPeerId = utils.$('#myPeerId');
         this.peerList = utils.$('#peerList');
+        this.remoteMeterContainer = null;
+        
+        // Add warning for low buffer sizes
+        const warningElement = document.createElement('div');
+        warningElement.className = 'buffer-warning';
+        warningElement.textContent = 'Warning: Very low buffer sizes may cause audio glitches. Use only with high-performance systems and low-latency audio interfaces.';
+        this.bufferSizeSelect.parentNode.appendChild(warningElement);
+        
+        // Show warning when low buffer sizes are selected
+        this.bufferSizeSelect.addEventListener('change', function() {
+            const value = parseInt(this.value);
+            if (value < 128) {
+                this.classList.add('low-latency');
+            } else {
+                this.classList.remove('low-latency');
+            }
+        });
         
         // Attach event listeners
         this.attachEventListeners();
@@ -151,12 +168,23 @@ class UIController {
      * @param {string} message Optional message to display
      */
     static updateUIState(state, message = '') {
+        // Check if user is joining from a shared link
+        const isJoiningFromLink = window.location.search.includes('join=');
+        
         switch (state) {
             case 'initial':
                 // Initial state - only start audio button enabled if device selected
                 this.startAudioBtn.disabled = !this.audioInputSelect.value;
                 this.changeDeviceBtn.disabled = true;
-                this.createSessionBtn.disabled = true;
+                
+                // If joining from a link, hide create session button
+                if (isJoiningFromLink) {
+                    this.createSessionBtn.style.display = 'none';
+                } else {
+                    this.createSessionBtn.style.display = 'inline-block';
+                    this.createSessionBtn.disabled = true;
+                }
+                
                 this.joinSessionBtn.disabled = true;
                 this.audioInputSelect.disabled = false;
                 this.refreshDevicesBtn.disabled = false;
@@ -172,7 +200,11 @@ class UIController {
                 // Loading state - disable all buttons
                 this.startAudioBtn.disabled = true;
                 this.changeDeviceBtn.disabled = true;
-                this.createSessionBtn.disabled = true;
+                
+                if (!isJoiningFromLink) {
+                    this.createSessionBtn.disabled = true;
+                }
+                
                 this.joinSessionBtn.disabled = true;
                 this.audioInputSelect.disabled = true;
                 this.refreshDevicesBtn.disabled = true;
@@ -183,7 +215,11 @@ class UIController {
                 // Audio ready state - enable create/join buttons
                 this.startAudioBtn.disabled = true;
                 this.changeDeviceBtn.disabled = false;
-                this.createSessionBtn.disabled = false;
+                
+                if (!isJoiningFromLink) {
+                    this.createSessionBtn.disabled = false;
+                }
+                
                 this.joinSessionBtn.disabled = !this.sessionIdInput.value.trim();
                 this.audioInputSelect.disabled = true;
                 this.refreshDevicesBtn.disabled = true;
@@ -198,7 +234,11 @@ class UIController {
             case 'connecting':
                 // Connecting state - disable buttons during connection
                 this.changeDeviceBtn.disabled = true;
-                this.createSessionBtn.disabled = true;
+                
+                if (!isJoiningFromLink) {
+                    this.createSessionBtn.disabled = true;
+                }
+                
                 this.joinSessionBtn.disabled = true;
                 this.sessionIdInput.disabled = true;
                 utils.$('.sharing-container').style.display = 'none';
@@ -208,7 +248,11 @@ class UIController {
             case 'session_created':
                 // Session created state
                 this.changeDeviceBtn.disabled = true;
-                this.createSessionBtn.disabled = true;
+                
+                if (!isJoiningFromLink) {
+                    this.createSessionBtn.disabled = true;
+                }
+                
                 this.joinSessionBtn.disabled = true;
                 this.sessionIdInput.disabled = true;
                 utils.$('.sharing-container').style.display = 'block';
@@ -218,7 +262,11 @@ class UIController {
             case 'connected':
                 // Connected state
                 this.changeDeviceBtn.disabled = true;
-                this.createSessionBtn.disabled = true;
+                
+                if (!isJoiningFromLink) {
+                    this.createSessionBtn.disabled = true;
+                }
+                
                 this.joinSessionBtn.disabled = true;
                 this.sessionIdInput.disabled = true;
                 utils.$('.sharing-container').style.display = 'block';
@@ -231,12 +279,72 @@ class UIController {
                 this.changeDeviceBtn.disabled = !audioManager.isAudioActive;
                 this.audioInputSelect.disabled = audioManager.isAudioActive;
                 this.refreshDevicesBtn.disabled = audioManager.isAudioActive;
-                this.createSessionBtn.disabled = !audioManager.isAudioActive;
+                
+                if (!isJoiningFromLink) {
+                    this.createSessionBtn.disabled = !audioManager.isAudioActive;
+                }
+                
                 this.joinSessionBtn.disabled = !audioManager.isAudioActive || !this.sessionIdInput.value.trim();
                 this.sessionIdInput.disabled = !audioManager.isAudioActive;
                 this.connectionStatus.textContent = `Error: ${message}`;
                 utils.showNotification(message, 'error');
                 break;
+        }
+    }
+
+    /**
+     * Create or update a meter for a remote peer
+     * @param {string} peerId The ID of the peer
+     */
+    static createRemoteMeter(peerId) {
+        // Check if the container exists, if not create it
+        if (!this.remoteMeterContainer) {
+            const metersDiv = utils.$('.meters');
+            this.remoteMeterContainer = document.createElement('div');
+            this.remoteMeterContainer.id = 'remoteMeterContainer';
+            this.remoteMeterContainer.className = 'remote-meters';
+            metersDiv.appendChild(this.remoteMeterContainer);
+        }
+        
+        // Check if meter already exists for this peer
+        if (utils.$(`#remoteMeter-${peerId}`)) {
+            return; // Already exists
+        }
+        
+        // Create a new meter element
+        const meterDiv = document.createElement('div');
+        meterDiv.className = 'meter';
+        meterDiv.id = `remoteMeterDiv-${peerId}`;
+        
+        // Include latency info in the label
+        const label = document.createElement('label');
+        label.innerHTML = `Remote Audio (${peerId}): ${latencyMonitor.getLatencyHtml(peerId)}`;
+        
+        const meter = document.createElement('meter');
+        meter.id = `remoteMeter-${peerId}`;
+        meter.min = 0;
+        meter.max = 100;
+        meter.value = 0;
+        
+        meterDiv.appendChild(label);
+        meterDiv.appendChild(meter);
+        this.remoteMeterContainer.appendChild(meterDiv);
+    }
+    
+    /**
+     * Remove a meter for a remote peer
+     * @param {string} peerId The ID of the peer
+     */
+    static removeRemoteMeter(peerId) {
+        const meterDiv = utils.$(`#remoteMeterDiv-${peerId}`);
+        if (meterDiv) {
+            meterDiv.remove();
+        }
+        
+        // If no remote meters left, remove the container
+        if (this.remoteMeterContainer && this.remoteMeterContainer.children.length === 0) {
+            this.remoteMeterContainer.remove();
+            this.remoteMeterContainer = null;
         }
     }
     
@@ -310,6 +418,9 @@ class UIController {
             utils.log(`Join parameter found in URL: ${joinParam}`);
             this.sessionIdInput.value = joinParam;
             
+            // Hide create session button if joining from a link
+            this.createSessionBtn.style.display = 'none';
+            
             // Show notification
             utils.showNotification('Session ID detected in URL. Click "Join Session" after starting your audio.', 'info');
             
@@ -348,6 +459,9 @@ class UIController {
         peerItem.appendChild(peerInfo);
         peerItem.appendChild(disconnectBtn);
         this.peerList.appendChild(peerItem);
+        
+        // Create the remote meter for this peer if not already created
+        this.createRemoteMeter(peerId);
     }
     
     /**
@@ -359,6 +473,9 @@ class UIController {
         if (peerItem) {
             peerItem.remove();
         }
+        
+        // Remove the remote meter for this peer
+        this.removeRemoteMeter(peerId);
         
         // Update connection status if no peers left
         if (this.peerList.children.length === 0) {

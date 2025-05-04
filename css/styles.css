@@ -60,19 +60,81 @@ button:disabled {
     background-color: #2d2d2d;
 }
 
+/* Updated meters layout */
 .meters {
     display: flex;
-    gap: 20px;
+    flex-direction: column;
+    gap: 15px;
     margin: 20px 0;
+    width: 100%;
 }
 
-.meter {
-    flex: 1;
+/* Local meter styles */
+.local-meter-container {
+    background-color: #2d2d2d;
+    padding: 15px;
+    border-radius: 5px;
+    width: 100%;
 }
 
-meter {
+.local-meter-container label {
+    font-weight: bold;
+    color: #bb86fc;
+    margin-bottom: 8px;
+    display: block;
+}
+
+.local-meter-container meter {
+    width: 100%;
+    height: 25px;
+}
+
+/* Remote meters container */
+.remote-meters {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: 100%;
+}
+
+/* Individual peer meter styles */
+.remote-meters .meter {
+    background-color: #2d2d2d;
+    padding: 10px;
+    border-radius: 5px;
+    margin-bottom: 5px;
+}
+
+.remote-meters .meter label {
+    color: #bb86fc;
+    font-weight: 500;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.remote-meters .meter .latency-info {
+    font-size: 0.85em;
+    color: #03dac6;
+    font-family: monospace;
+}
+
+.remote-meters meter {
     width: 100%;
     height: 20px;
+}
+
+/* Latency color indicators */
+.latency-good {
+    color: #03dac6 !important; /* Good - green/teal */
+}
+
+.latency-medium {
+    color: #ffb74d !important; /* Medium - amber */
+}
+
+.latency-poor {
+    color: #cf6679 !important; /* Poor - red */
 }
 
 label {
@@ -233,6 +295,19 @@ input[type="text"]:read-only {
     margin-top: 20px;
 }
 
+/* Warning for low buffer sizes */
+.buffer-warning {
+    color: #ff7597;
+    font-size: 0.8em;
+    margin-top: 5px;
+    display: none;
+}
+
+/* Show warning when low buffer sizes are selected */
+#bufferSizeSelect.low-latency ~ .buffer-warning {
+    display: block;
+}
+
 /* Adding responsive styles */
 @media (max-width: 600px) {
     .meters {
@@ -261,5 +336,14 @@ input[type="text"]:read-only {
     #shareUrlInput {
         width: 100%;
         margin-bottom: 10px;
+    }
+    
+    .remote-meters .meter label {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    
+    .remote-meters .meter .latency-info {
+        margin-top: 5px;
     }
 }

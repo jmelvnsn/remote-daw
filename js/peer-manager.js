@@ -199,6 +199,9 @@ class PeerManager {
             UIController.addPeerToList(conn.peer);
             utils.$('#connectionStatus').textContent = `Status: Connected to ${conn.peer}`;
             
+            // Start latency monitoring
+            latencyMonitor.startMonitoring(conn.peer, conn);
+            
             // Send audio settings
             conn.send({
                 type: 'audio-settings',
@@ -213,6 +216,7 @@ class PeerManager {
             } else if (data.type === 'chat') {
                 utils.log(`${conn.peer}: ${data.message}`);
             }
+            // Note: Latency ping/pong messages are handled by the LatencyMonitor
         });
         
         // Handle connection closing
@@ -270,6 +274,9 @@ class PeerManager {
         if (this.calls[peerId]) {
             delete this.calls[peerId];
         }
+        
+        // Stop latency monitoring
+        latencyMonitor.stopMonitoring(peerId);
         
         // Remove from audio manager
         audioManager.removeRemoteStream(peerId);

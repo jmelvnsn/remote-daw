@@ -37,7 +37,10 @@
             <div class="settings-row">
                 <label for="bufferSizeSelect">Buffer Size:</label>
                 <select id="bufferSizeSelect">
-                    <option value="256">256 (Lowest Latency)</option>
+                    <option value="32">32 (Ultra Low Latency)</option>
+                    <option value="64">64 (Very Low Latency)</option>
+                    <option value="96">96 (Low Latency)</option>
+                    <option value="256">256 (Balanced)</option>
                     <option value="512" selected>512</option>
                     <option value="1024">1024</option>
                     <option value="2048">2048 (Most Stable)</option>
@@ -86,14 +89,11 @@
         </div>
         
         <div class="meters">
-            <div class="meter">
+            <div class="local-meter-container">
                 <label>Local Audio Level:</label>
                 <meter id="localMeter" min="0" max="100" value="0"></meter>
             </div>
-            <div class="meter">
-                <label>Remote Audio Level:</label>
-                <meter id="remoteMeter" min="0" max="100" value="0"></meter>
-            </div>
+            <!-- Remote meters will be added dynamically -->
         </div>
         
         <div class="peers-container">
@@ -121,6 +121,7 @@
     <!-- Application JavaScript -->
     <script src="js/utils.js"></script>
     <script src="js/audio-manager.js"></script>
+    <script src="js/latency-monitor.js"></script>
     <script src="js/peer-manager.js"></script>
     <script src="js/ui-controller.js"></script>
     <script src="js/main.js"></script>
