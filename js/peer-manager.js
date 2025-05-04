@@ -247,12 +247,22 @@ class PeerManager {
             });
         });
         
-        // Handle data
+        // Handle data with global handler first
         conn.on('data', (data) => {
+            // Try the global stats handler first
+            if (window.globalStatsHandler && window.globalStatsHandler(conn.peer, data)) {
+                // Message was handled by the global handler, no need to process further
+                return;
+            }
+            
+            // Process other message types
             if (data.type === 'audio-settings') {
                 utils.log(`Received audio settings from ${conn.peer}: ${JSON.stringify(data.settings)}`);
             } else if (data.type === 'chat') {
                 utils.log(`${conn.peer}: ${data.message}`);
+            } else {
+                // Log unknown message types
+                utils.log(`Received unknown message type from ${conn.peer}: ${data.type}`);
             }
         });
         

@@ -129,6 +129,8 @@
     <!-- Audio Debug Panel -->
     <div id="audio-debug-panel" style="display: none; position: fixed; bottom: 0; right: 0; width: 300px; background-color: #1e1e1e; border: 1px solid #444; padding: 10px; z-index: 9999;">
         <h3>Audio Debug</h3>
+        <!-- Add this button to the debug panel in index.html -->
+        <button id="force-update-btn" style="width: 100%; margin-bottom: 5px; background-color: #ff7597;">Force Update Latency</button>
         <button id="force-audio-btn" style="width: 100%; margin-bottom: 5px;">Force Enable Audio</button>
         <button id="restart-audio-btn" style="width: 100%; margin-bottom: 5px;">Restart Audio Processing</button>
         <button id="check-connections-btn" style="width: 100%; margin-bottom: 5px;">Check Connections</button>
@@ -250,6 +252,32 @@
             log.scrollTop = log.scrollHeight;
             console.log(message);
         }
+    </script>
+    <script>
+        document.getElementById('force-update-btn').addEventListener('click', () => {
+            if (window.latencyMonitor) {
+                const result = window.latencyMonitor.forceUpdate();
+                logDebug(`Force update result: ${result}`);
+                
+                // Also run the debug function
+                setTimeout(() => {
+                    if (window.latencyMonitor) {
+                        window.latencyMonitor.debugLatencyMonitor();
+                    }
+                }, 1000);
+                
+                // Add a clear visual indicator that something happened
+                const debugLog = document.getElementById('audio-debug-log');
+                if (debugLog) {
+                    const indicator = document.createElement('div');
+                    indicator.style.color = '#ff7597';
+                    indicator.style.fontWeight = 'bold';
+                    indicator.textContent = '*** Latency values have been forced to update! ***';
+                    debugLog.appendChild(indicator);
+                    debugLog.scrollTop = debugLog.scrollHeight;
+                }
+            }
+        });
     </script>
 </body>
 </html>
