@@ -124,18 +124,19 @@ class LatencyMonitor {
         // Get current values
         const stats = this.fallbackValues[peerId] || this.baseValues;
         
-        // Create the message
+        // Create the message - use a simpler format with just the necessary fields
         const statsMessage = {
-            type: 'stats-update',
+            type: 'stats-update',  // Important: use consistent type name
             stats: {
-                rtt: stats.rtt,
-                jitter: stats.jitter
+                rtt: stats.rtt || 50,  // Provide fallback
+                jitter: stats.jitter || 10  // Provide fallback
             },
             timestamp: Date.now()
         };
         
         // Send the message
         try {
+            console.log(`Sending stats update to peer ${peerId}:`, statsMessage);
             connection.send(statsMessage);
             console.log(`Sent stats update to peer ${peerId}: RTT=${stats.rtt}ms, Jitter=${stats.jitter}ms`);
             return true;

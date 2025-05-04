@@ -249,7 +249,30 @@ class PeerManager {
         
         // Handle data with global handler first
         conn.on('data', (data) => {
-            // Try the global stats handler first
+            // Log all incoming data for debugging
+            console.log(`Data received from ${conn.peer}:`, data);
+            
+            // Check if data is valid
+            if (!data || typeof data !== 'object' || !data.type) {
+                console.log(`Invalid data received from ${conn.peer}`);
+                return;
+            }
+            
+            // First check for stats-update type
+            if (data.type === 'stats-update') {
+                console.log(`Received stats update from ${conn.peer}:`, data.stats);
+                
+                // Check if latencyMonitor exists
+                if (window.latencyMonitor && data.stats) {
+                    // Update the latency display
+                    const rtt = data.stats.rtt || 50;
+                    const jitter = data.stats.jitter || 10;
+                    latencyMonitor.updateLatencyDisplay(conn.peer, rtt, jitter);
+                }
+                return;
+            }
+            
+            // Try the global stats handler if available
             if (window.globalStatsHandler && window.globalStatsHandler(conn.peer, data)) {
                 // Message was handled by the global handler, no need to process further
                 return;
