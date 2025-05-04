@@ -125,17 +125,17 @@
     <script src="js/peer-manager.js"></script>
     <script src="js/ui-controller.js"></script>
     <script src="js/main.js"></script>
-
-
-    <!-- Audio Debug Panel - Add before closing body tag -->
+    
+    <!-- Audio Debug Panel -->
     <div id="audio-debug-panel" style="display: none; position: fixed; bottom: 0; right: 0; width: 300px; background-color: #1e1e1e; border: 1px solid #444; padding: 10px; z-index: 9999;">
         <h3>Audio Debug</h3>
         <button id="force-audio-btn" style="width: 100%; margin-bottom: 5px;">Force Enable Audio</button>
         <button id="restart-audio-btn" style="width: 100%; margin-bottom: 5px;">Restart Audio Processing</button>
         <button id="check-connections-btn" style="width: 100%; margin-bottom: 5px;">Check Connections</button>
+        <button id="refresh-latency-btn" style="width: 100%; margin-bottom: 5px; background-color: #018786;">Refresh Latency Display</button>
         <div id="audio-debug-log" style="height: 100px; overflow-y: auto; background-color: #121212; padding: 5px; margin-top: 5px; font-family: monospace; font-size: 11px;"></div>
     </div>
-
+    
     <script>
         // Debug panel toggle with Alt+D
         document.addEventListener('keydown', (e) => {
@@ -192,6 +192,56 @@
             }
         });
         
+        document.getElementById('refresh-latency-btn').addEventListener('click', () => {
+            if (window.latencyMonitor) {
+                const result = window.latencyMonitor.refreshAll();
+                logDebug(`Latency refresh result: ${result}`);
+                
+                // Force an immediate update for all peers
+                if (window.peerManager) {
+                    const peers = window.peerManager.getConnectedPeers();
+                    logDebug(`Forcing update for ${peers.length} peers`);
+                    
+                    peers.forEach(peerId => {
+                        const latencyEl = document.getElementById(`latency-${peerId}`);
+                        if (latencyEl) {
+                            latencyEl.textContent = 'Updating...';
+                            window.latencyMonitor.updateLatencyStats(peerId);
+                        } else {
+                            logDebug(`Latency element for ${peerId} not found, recreating...`);
+                            
+                            // Try to recreate the element
+                            const meterDiv = document.getElementById(`remoteMeterDiv-${peerId}`);
+                            if (meterDiv) {
+                                const label = meterDiv.querySelector('label');
+                                if (label) {
+                                    const span = document.createElement('span');
+                                    span.id = `latency-${peerId}`;
+                                    span.className = 'latency-info';
+                                    span.textContent = 'Measuring latency...';
+                                    label.appendChild(document.createTextNode(' '));
+                                    label.appendChild(span);
+                                    logDebug(`Created new latency span for ${peerId}`);
+                                    
+                                    // Force update after creation
+                                    setTimeout(() => {
+                                        window.latencyMonitor.updateLatencyStats(peerId);
+                                    }, 100);
+                                }
+                            }
+                        }
+                    });
+                }
+                
+                // Show debug info after a delay
+                setTimeout(() => {
+                    if (window.latencyMonitor) {
+                        window.latencyMonitor.debugLatencyMonitor();
+                    }
+                }, 1000);
+            }
+        });
+        
         function logDebug(message) {
             const log = document.getElementById('audio-debug-log');
             const entry = document.createElement('div');
@@ -201,7 +251,5 @@
             console.log(message);
         }
     </script>
-    <!-- End of Debug Panel -->
-
 </body>
 </html>

@@ -235,7 +235,7 @@ class PeerManager {
             UIController.addPeerToList(conn.peer);
             utils.$('#connectionStatus').textContent = `Status: Connected to ${conn.peer}`;
             
-            // Start latency monitoring
+            // Start latency monitoring with simplified approach
             if (window.latencyMonitor) {
                 latencyMonitor.startMonitoring(conn.peer, conn);
             }
@@ -254,7 +254,6 @@ class PeerManager {
             } else if (data.type === 'chat') {
                 utils.log(`${conn.peer}: ${data.message}`);
             }
-            // Note: Latency ping/pong messages are handled by the LatencyMonitor
         });
         
         // Handle connection closing

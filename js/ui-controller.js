@@ -365,7 +365,7 @@ class UIController {
     
     /**
      * Create or update a meter for a remote peer
-     * This updated version ensures latency display works properly
+     * This ensures latency display works properly with the simplified approach
      * @param {string} peerId The ID of the peer
      */
     static createRemoteMeter(peerId) {
@@ -429,14 +429,11 @@ class UIController {
         console.log(`- Meter element ID: remoteMeter-${peerId}`);
         console.log(`- Latency span ID: latency-${peerId}`);
         
-        // Force an immediate latency check if latencyMonitor is available
+        // Force an immediate latency update if latencyMonitor is available
         if (window.latencyMonitor) {
             setTimeout(() => {
                 console.log(`Forcing latency update for peer ${peerId}`);
-                // Force a ping to get initial values
-                if (window.peerManager && window.peerManager.connections[peerId]) {
-                    window.latencyMonitor.sendPing(peerId, window.peerManager.connections[peerId]);
-                }
+                window.latencyMonitor.updateLatencyStats(peerId);
             }, 500);
         }
     }
