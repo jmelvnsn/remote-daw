@@ -18,53 +18,76 @@ This application enables musicians to collaborate remotely by creating a peer-to
 - **Automated connection management** using PeerJS
 - **Advanced debugging tools** for troubleshooting audio issues
 
-## Step-by-Step Signal Flow with Latency Identification
+## Detailed Signal Flow with Latency Analysis
+
+The following diagram shows the complete signal flow from end to end, including all latency points:
 
 ```mermaid
-flowchart TB
-    Start([User Opens App]) --> SelectAudio[Select Audio Input Device]
-    SelectAudio --> ConfigSettings[Configure Audio Settings\n- Sample Rate\n- Buffer Size\n- Bit Depth]
-    ConfigSettings --> StartAudio[Start Audio Input]
-    StartAudio --> CreateOrJoin{Create or Join?}
+flowchart TD
+    subgraph "Local User Environment"
+        DAW[DAW Output]
+        VirtAudio[Virtual Audio Device]
+        Browser[Browser Audio Capture]
+        WebAudio[Web Audio Processing]
+        WebRTC_Local[WebRTC Encoding]
+        
+        DAW -->|"0-2ms"| VirtAudio
+        VirtAudio -->|"10-100ms Buffer Latency"| Browser
+        Browser -->|"5-15ms"| WebAudio
+        WebAudio -->|"5-50ms nBuffer Size Impact"| WebRTC_Local
+    end
     
-    CreateOrJoin -->|Create| CreateSession[Create New Session]
-    CreateOrJoin -->|Join| JoinSession[Join Existing Session]
+    subgraph "Network"
+        PeerJS[PeerJS Signaling]
+        Internet[Internet Routing]
+        
+        WebRTC_Local -->|"50-500ms One-time Setup"| PeerJS
+        PeerJS -->|"Connection Establishment"| Internet
+        Internet -->|"20-200ms Network Latency & Jitter"| WebRTC_Remote
+    end
     
-    CreateSession --> ShareLink[Share Session Link/ID]
-    JoinSession --> ConnectToPeer[Connect to Host Peer]
-    ShareLink --> WaitForPeers[Wait for Peers to Join]
+    subgraph "Remote User Environment"
+        WebRTC_Remote[WebRTC Decoding]
+        AudioProc[Audio Post-Processing]
+        AudioOutput[Audio Output]
+        Monitoring[Remote Monitoring]
+        
+        WebRTC_Remote -->|"5-20ms Decoding Delay"| AudioProc
+        AudioProc -->|"Processing Effect"| AudioOutput
+        AudioOutput -->|"5-30ms Output Buffer"| Monitoring
+    end
     
-    ConnectToPeer --> EstablishRTC[Establish WebRTC Connection]
-    WaitForPeers --> EstablishRTC
+    subgraph "Monitoring Systems"
+        LatencyDisplay[Latency Monitor]
+        JitterDisplay[Jitter Detection]
+        QualityIndicator[Connection Quality]
+        
+        Internet -.->|"RTT Measurement"| LatencyDisplay
+        Internet -.->|"Variance Analysis"| JitterDisplay
+        LatencyDisplay -->|"Data Feed"| QualityIndicator
+        JitterDisplay -->|"Data Feed"| QualityIndicator
+    end
     
-    EstablishRTC --> CreateDataChannel[Create Data Channel\nfor Latency Monitoring]
-    CreateDataChannel --> InitiateCall[Initiate Audio Call]
-    
-    InitiateCall --> StreamAudio[Stream Audio via WebRTC]
-    StreamAudio --> MonitorLatency[Monitor Connection\nLatency and Quality]
-    
-    MonitorLatency --> AdjustSettings{Need Adjustments?}
-    AdjustSettings -->|Yes| ConfigSettings
-    AdjustSettings -->|No| Continue([Continue Session])
-    
-    classDef userActions fill:#e3f2fd,stroke:#1565c0,stroke-width:2px
-    classDef connectionSteps fill:#f3e5f5,stroke:#6a1b9a,stroke-width:2px
+    classDef userSteps fill:#e3f2fd,stroke:#1565c0,stroke-width:2px
+    classDef networkSteps fill:#f3e5f5,stroke:#6a1b9a,stroke-width:2px
     classDef audioSteps fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
+    classDef monitoringSteps fill:#fff8e1,stroke:#ff8f00,stroke-width:2px
     
-    class Start,SelectAudio,ConfigSettings,CreateOrJoin,AdjustSettings userActions
-    class CreateSession,JoinSession,ShareLink,WaitForPeers,ConnectToPeer,EstablishRTC,CreateDataChannel connectionSteps
-    class StartAudio,InitiateCall,StreamAudio,MonitorLatency,Continue audioSteps
+    class DAW,VirtAudio,Browser,WebAudio,WebRTC_Local userSteps
+    class PeerJS,Internet networkSteps
+    class WebRTC_Remote,AudioProc,AudioOutput,Monitoring audioSteps
+    class LatencyDisplay,JitterDisplay,QualityIndicator monitoringSteps
 ```
 
 ### Latency Analysis in the Audio Collaboration Pipeline
 
-The DAW Collaboration Tool minimizes latency where possible, but several unavoidable latency points exist:
+The DAW Collaboration Tool minimizes latency where possible, but several unavoidable latency points exist throughout the signal chain:
 
-1. **Audio Driver Buffer** (10-100ms): The virtual audio device adds latency based on buffer size settings
+1. **Audio Driver Buffer** (10-100ms): The virtual audio device adds latency based on buffer size settings. Smaller buffers reduce latency but may introduce audio glitches.
    
-2. **Browser Buffer Size** (5-50ms): Web Audio API processing creates latency proportional to the chosen buffer size
+2. **Browser Buffer Size** (5-50ms): Web Audio API processing creates latency proportional to the chosen buffer size. This is configurable in the application settings.
    
-3. **Signaling Latency** (50-500ms): One-time connection setup delay through PeerJS server
+3. **Signaling Latency** (50-500ms): One-time connection setup delay through the PeerJS server. This only affects initial connection and does not impact the ongoing audio stream.
    
 4. **Network Latency & Jitter** (20-200ms): The most significant variable factor, depends on:
    - Internet connection quality
@@ -72,9 +95,9 @@ The DAW Collaboration Tool minimizes latency where possible, but several unavoid
    - Network congestion
    - Route efficiency
    
-5. **Decoding Delay** (5-20ms): Time required to decode the received audio stream
+5. **Decoding Delay** (5-20ms): Time required to decode the received audio stream on the remote user's device.
    
-6. **Output Buffer** (5-30ms): Final playback buffer adds small additional latency
+6. **Output Buffer** (5-30ms): Final playback buffer adds small additional latency before audio reaches the output device.
 
 **Total End-to-End Latency Range**: ~45-900ms (under typical conditions: 80-150ms)
 
@@ -171,6 +194,34 @@ daw-collaboration-app/
 ## License
 
 This project is open source and available under the MIT License.
+
+## Future Goals
+
+### Latency Reduction Initiatives
+
+1. **Native WebRTC Implementation**: Replace PeerJS with a custom WebRTC implementation to eliminate middleware latency and optimize for audio-specific use cases.
+
+2. **WebTransport Integration**: Investigate WebTransport API as an alternative to WebRTC for potentially lower latency streaming once browser support matures.
+
+3. **Optimized Codec Pipeline**: Implement advanced audio codecs with better compression-to-latency ratios and develop a streamlined encoding/decoding process.
+
+4. **Predictive Jitter Buffering**: Create an AI-powered adaptive buffer that predicts network conditions to minimize buffer size while preventing dropouts.
+
+5. **WebAssembly Processing**: Move critical audio processing to WebAssembly for near-native performance and reduced processing latency.
+
+### VST/AU Plugin Development
+
+1. **Native DAW Plugin**: Develop VST3 and AU plugins that integrate directly with DAWs, eliminating the need for virtual audio routing.
+
+2. **Direct API Communication**: Create a cross-platform plugin that communicates directly with a lightweight server component, bypassing browser limitations.
+
+3. **Integrated Monitoring**: Add built-in plugin monitoring with waveform visualization and latency compensation tools.
+
+4. **Session Management**: Implement project-based session management that saves connection details with DAW projects.
+
+5. **Multi-Channel Support**: Add support for multi-channel audio streams to enable more complex collaborative workflows.
+
+The long-term vision is to reduce total end-to-end latency to under 30ms for users with quality internet connections while maintaining audio fidelity, and to create a seamless experience that integrates directly with musicians' existing DAW workflows without requiring additional audio routing software.
 
 ## Acknowledgements
 
