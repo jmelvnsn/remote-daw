@@ -22,57 +22,38 @@ This application enables musicians to collaborate remotely by creating a peer-to
 
 ```mermaid
 flowchart TB
-    %% Start with user setup
-    Start([User Opens App]) --> AudioSettings[Configure Audio Settings]
-    AudioSettings --> ConfigureDAW[Configure DAW Audio Output]
+    Start([User Opens App]) --> SelectAudio[Select Audio Input Device]
+    SelectAudio --> ConfigSettings[Configure Audio Settings\n- Sample Rate\n- Buffer Size\n- Bit Depth]
+    ConfigSettings --> StartAudio[Start Audio Input]
+    StartAudio --> CreateOrJoin{Create or Join?}
     
-    %% DAW routing setup - Local Side
-    ConfigureDAW --> |Step 1: Send DAW audio| VirtualDevice[Virtual Audio Device<br>Loopback/BlackHole]
+    CreateOrJoin -->|Create| CreateSession[Create New Session]
+    CreateOrJoin -->|Join| JoinSession[Join Existing Session]
     
-    %% First potential latency point
-    VirtualDevice --> |Step 2: Route to browser<br>⚠️ Latency Point 1:<br>Audio driver buffer| WebAudioCapture[Web Audio Capture]
+    CreateSession --> ShareLink[Share Session Link/ID]
+    JoinSession --> ConnectToPeer[Connect to Host Peer]
+    ShareLink --> WaitForPeers[Wait for Peers to Join]
     
-    %% Audio processing in browser
-    WebAudioCapture --> |Step 3: Process audio| AudioContext[Audio Context<br>Processing]
+    ConnectToPeer --> EstablishRTC[Establish WebRTC Connection]
+    WaitForPeers --> EstablishRTC
     
-    %% Second potential latency point
-    AudioContext --> |Step 4: Audio analysis<br>⚠️ Latency Point 2:<br>Browser buffer size| LocalMeters[Display Local<br>Audio Levels]
+    EstablishRTC --> CreateDataChannel[Create Data Channel\nfor Latency Monitoring]
+    CreateDataChannel --> InitiateCall[Initiate Audio Call]
     
-    %% Session establishment
-    Start --> InitPeerJS[Initialize PeerJS]
-    InitPeerJS --> |Step 5: Create or join session| PeerServer[PeerJS Server<br>Connection Broker]
+    InitiateCall --> StreamAudio[Stream Audio via WebRTC]
+    StreamAudio --> MonitorLatency[Monitor Connection\nLatency and Quality]
     
-    %% Third potential latency point
-    PeerServer --> |Step 6: Establish connection<br>⚠️ Latency Point 3:<br>Signaling latency| PeerConnection[WebRTC P2P Connection]
+    MonitorLatency --> AdjustSettings{Need Adjustments?}
+    AdjustSettings -->|Yes| ConfigSettings
+    AdjustSettings -->|No| Continue([Continue Session])
     
-    %% Audio streaming
-    AudioContext --> |Step 7: Stream audio| PeerConnection
+    classDef userActions fill:#e3f2fd,stroke:#1565c0,stroke-width:2px
+    classDef connectionSteps fill:#f3e5f5,stroke:#6a1b9a,stroke-width:2px
+    classDef audioSteps fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
     
-    %% Fourth and most significant latency point
-    PeerConnection --> |Step 8: Transmit audio<br>⚠️ Latency Point 4:<br>Network latency & jitter| RemotePeer[Remote Peer Connection]
-    
-    %% Receiving side
-    RemotePeer --> |Step 9: Decode audio<br>⚠️ Latency Point 5:<br>Decoding delay| RemoteAudioContext[Remote Audio Context]
-    
-    %% Fifth potential latency point
-    RemoteAudioContext --> |Step 10: Output audio<br>⚠️ Latency Point 6:<br>Output buffer| Speakers[Computer Speakers/Headphones]
-    RemoteAudioContext --> RemoteMeters[Display Remote<br>Audio Levels]
-    
-    %% Latency monitoring
-    PeerConnection --> |Step 11: Monitor quality| LatencyMonitor[Latency/Jitter<br>Monitoring]
-    LatencyMonitor --> |Step 12: Display stats| LatencyDisplay[Connection Quality<br>Display]
-    
-    %% Styling for clarity
-    classDef setup fill:#e3f2fd,stroke:#1565c0,stroke-width:2px
-    classDef audio fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
-    classDef network fill:#f3e5f5,stroke:#6a1b9a,stroke-width:2px
-    classDef latency fill:#ffebee,stroke:#c62828,stroke-width:2px,color:#d32f2f,font-weight:bold
-    
-    %% Apply styles
-    class Start,AudioSettings,ConfigureDAW,InitPeerJS setup
-    class VirtualDevice,WebAudioCapture,AudioContext,LocalMeters,RemoteAudioContext,RemoteMeters,Speakers audio
-    class PeerServer,PeerConnection,RemotePeer network
-    class LatencyMonitor,LatencyDisplay latency
+    class Start,SelectAudio,ConfigSettings,CreateOrJoin,AdjustSettings userActions
+    class CreateSession,JoinSession,ShareLink,WaitForPeers,ConnectToPeer,EstablishRTC,CreateDataChannel connectionSteps
+    class StartAudio,InitiateCall,StreamAudio,MonitorLatency,Continue audioSteps
 ```
 
 ### Latency Analysis in the Audio Collaboration Pipeline

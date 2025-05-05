@@ -362,7 +362,7 @@ class UIController {
                 break;
         }
     }
-    
+
     /**
      * Create or update a meter for a remote peer
      * This ensures latency display works properly with the simplified approach
@@ -563,13 +563,45 @@ class UIController {
         const peerInfo = document.createElement('div');
         peerInfo.textContent = `Peer: ${peerId}`;
         
+        // Updated disconnect button event handler in UI-Controller.js
+        // This goes in the addPeerToList method
         const disconnectBtn = document.createElement('button');
         disconnectBtn.textContent = 'Disconnect';
         disconnectBtn.addEventListener('click', () => {
-            if (peerManager.isConnectedToPeer(peerId)) {
-                peerManager.connections[peerId].close();
+            // Comprehensive disconnect operation
+            if (peerManager) {
+                // Close data connection if it exists
+                if (peerManager.connections[peerId] && peerManager.connections[peerId].open) {
+                    peerManager.connections[peerId].close();
+                }
+                
+                // Close media connection if it exists
+                if (peerManager.calls[peerId]) {
+                    peerManager.calls[peerId].close();
+                }
+                
+                // Remove remote stream from audio manager
+                if (window.audioManager) {
+                    audioManager.removeRemoteStream(peerId);
+                }
+                
+                // Stop latency monitoring if active
+                if (window.latencyMonitor) {
+                    window.latencyMonitor.stopMonitoring(peerId);
+                }
+                
+                // Remove fallback audio element if it exists
+                const fallbackAudio = document.getElementById(`audio-fallback-${peerId}`);
+                if (fallbackAudio) {
+                    fallbackAudio.pause();
+                    fallbackAudio.remove();
+                }
+                
+                // Remove from UI list
+                UIController.removePeerFromList(peerId);
+                
+                utils.log(`Peer ${peerId} disconnected successfully`);
             }
-            this.removePeerFromList(peerId);
         });
         
         peerItem.appendChild(peerInfo);

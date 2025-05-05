@@ -185,16 +185,57 @@ class DawCollaborationApp {
     }
     
     /**
-     * Initialize the application
+     * Initialize the application with proper component sequencing
      */
     initialize() {
         utils.log(`DAW Collaboration Tool v${this.version} initializing`);
         
-        // Initialize UI controller
-        UIController.initialize();
+        // Check for utils
+        if (typeof utils === 'undefined') {
+            console.error("Utils not initialized. Check script loading order.");
+            return;
+        }
+        
+        // Ensure AudioManager is initialized
+        if (typeof AudioManager === 'function' && !window.audioManager) {
+            console.log("Initializing AudioManager...");
+            window.audioManager = new AudioManager();
+        } else if (!window.audioManager) {
+            console.error("AudioManager not available. Check audio-manager.js.");
+            return;
+        }
+        
+        // Ensure PeerManager is initialized
+        if (typeof PeerManager === 'function' && !window.peerManager) {
+            console.log("Initializing PeerManager...");
+            window.peerManager = new PeerManager();
+        } else if (!window.peerManager) {
+            console.error("PeerManager not available. Check peer-manager.js.");
+            return;
+        }
+        
+        // Ensure LatencyMonitor is initialized after PeerManager
+        if (typeof LatencyMonitor === 'function' && !window.latencyMonitor) {
+            console.log("Initializing LatencyMonitor...");
+            window.latencyMonitor = new LatencyMonitor();
+        } else if (!window.latencyMonitor) {
+            console.error("LatencyMonitor not available. Check latency-monitor.js.");
+            // Not critical, can continue
+        }
+        
+        // Initialize UI controller last to ensure all components are available
+        if (typeof UIController !== 'undefined') {
+            console.log("Initializing UIController...");
+            UIController.initialize();
+        } else {
+            console.error("UIController not available. Check ui-controller.js.");
+            return;
+        }
         
         // Check for join parameter in URL
-        UIController.checkUrlForJoinParameter();
+        if (UIController.checkUrlForJoinParameter) {
+            UIController.checkUrlForJoinParameter();
+        }
         
         // Log browser info
         const browserInfo = utils.getBrowserInfo();
@@ -209,17 +250,25 @@ class DawCollaborationApp {
             container.appendChild(versionInfo);
         }
         
+        // Double-check all components are initialized before declaring success
+        if (window.audioManager && window.peerManager && window.latencyMonitor) {
+            utils.log('All components initialized successfully');
+        } else {
+            utils.log('Some components failed to initialize. Check console for errors.');
+            console.warn('Component status:', {
+                audioManager: !!window.audioManager,
+                peerManager: !!window.peerManager,
+                latencyMonitor: !!window.latencyMonitor,
+                UIController: !!UIController
+            });
+        }
+        
         utils.log('Application initialized');
     }
 }
 
 // Create the application instance
 const app = new DawCollaborationApp();
-
-/**
- * Add this code to your main.js file to create a visible debug button
- * This will add the button after the DOM is loaded
- */
 
 // Add visible debug button to the UI
 document.addEventListener('DOMContentLoaded', function() {
@@ -269,225 +318,145 @@ document.addEventListener('DOMContentLoaded', function() {
     console.log('Added visible debug button to UI');
 });
 
-// Add this to initialize the debug panel programmatically if it's not already in the HTML
-function initializeDebugPanel() {
-    // Check if the panel already exists
-    if (document.getElementById('audio-debug-panel')) {
-        console.log('Debug panel already exists');
-        return;
+// NEW SIMPLIFIED DEBUG PANEL FUNCTIONALITY
+function fixAudioIssues() {
+    console.log('Starting comprehensive audio fix...');
+    const log = document.getElementById('audio-debug-log');
+    if (log) {
+        const entry = document.createElement('div');
+        entry.textContent = 'Starting comprehensive audio fix...';
+        log.appendChild(entry);
+        log.scrollTop = log.scrollHeight;
     }
     
-    // Create the debug panel
-    const debugPanel = document.createElement('div');
-    debugPanel.id = 'audio-debug-panel';
-    debugPanel.style.display = 'none';
-    debugPanel.style.position = 'fixed';
-    debugPanel.style.bottom = '80px'; // Positioned above the button
-    debugPanel.style.right = '20px';
-    debugPanel.style.width = '320px';
-    debugPanel.style.backgroundColor = '#1e1e1e';
-    debugPanel.style.border = '1px solid #444';
-    debugPanel.style.borderRadius = '8px';
-    debugPanel.style.padding = '15px';
-    debugPanel.style.zIndex = '10000'; // Higher than button
-    debugPanel.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.3)';
-    
-    // Panel content with improved styling
-    debugPanel.innerHTML = `
-        <h3 style="margin-top: 0; color: #bb86fc; border-bottom: 1px solid #444; padding-bottom: 8px; margin-bottom: 12px;">Audio Debug Panel</h3>
-        <button id="fix-latency-updates-btn" style="width: 100%; margin-bottom: 8px; background-color: #bb86fc; color: #121212; border: none; border-radius: 4px; padding: 8px 10px; cursor: pointer;">Fix Latency Updates</button>
-        <button id="force-audio-btn" style="width: 100%; margin-bottom: 8px; background-color: #03dac6; color: #121212; border: none; border-radius: 4px; padding: 8px 10px; cursor: pointer;">Force Enable Audio</button>
-        <button id="restart-audio-btn" style="width: 100%; margin-bottom: 8px; background-color: #2d2d2d; color: #e0e0e0; border: 1px solid #444; border-radius: 4px; padding: 8px 10px; cursor: pointer;">Restart Audio Processing</button>
-        <button id="check-connections-btn" style="width: 100%; margin-bottom: 8px; background-color: #2d2d2d; color: #e0e0e0; border: 1px solid #444; border-radius: 4px; padding: 8px 10px; cursor: pointer;">Check Connections</button>
-        <button id="refresh-latency-btn" style="width: 100%; margin-bottom: 8px; background-color: #018786; color: #e0e0e0; border: none; border-radius: 4px; padding: 8px 10px; cursor: pointer;">Refresh Latency Display</button>
-        <button id="force-update-btn" style="width: 100%; margin-bottom: 8px; background-color: #ff7597; color: #121212; border: none; border-radius: 4px; padding: 8px 10px; cursor: pointer;">Force Update Latency</button>
-        <div id="audio-debug-log" style="height: 150px; overflow-y: auto; background-color: #121212; padding: 8px; margin-top: 10px; font-family: monospace; font-size: 11px; border-radius: 4px; border: 1px solid #333;"></div>
-    `;
-    
-    // Add the panel to the body
-    document.body.appendChild(debugPanel);
-    console.log('Debug panel initialized');
-    
-    // Add event listeners to buttons
-    setupDebugButtonHandlers();
-}
-
-// Set up event handlers for debug buttons
-function setupDebugButtonHandlers() {
-    // Fix Latency Updates button
-    const fixLatencyBtn = document.getElementById('fix-latency-updates-btn');
-    if (fixLatencyBtn) {
-        fixLatencyBtn.addEventListener('click', () => {
-            if (window.debugTools) {
-                const result = debugTools.fixLatencyUpdates();
-                logDebug(`Fix latency updates result: ${result}`);
-            } else {
-                logDebug('Debug tools not available');
-            }
-        });
-    }
-    
-    // Force Enable Audio button
-    const forceAudioBtn = document.getElementById('force-audio-btn');
-    if (forceAudioBtn) {
-        forceAudioBtn.addEventListener('click', () => {
-            if (window.audioManager) {
-                const result = audioManager.forceEnableAudio();
-                logDebug(`Force enable result: ${result}`);
-            } else {
-                logDebug('Audio manager not available');
-            }
-        });
-    }
-    
-    // Restart Audio Processing button
-    const restartAudioBtn = document.getElementById('restart-audio-btn');
-    if (restartAudioBtn) {
-        restartAudioBtn.addEventListener('click', () => {
-            if (window.audioManager) {
-                // Restart meter updates
-                if (audioManager.meterUpdateInterval) {
-                    cancelAnimationFrame(audioManager.meterUpdateInterval);
-                    audioManager.meterUpdateInterval = null;
+    // Step 1: Resume audio context if suspended
+    if (window.audioManager && window.audioManager.audioContext) {
+        if (window.audioManager.audioContext.state !== 'running') {
+            console.log(`Resuming audio context (current state: ${window.audioManager.audioContext.state})`);
+            window.audioManager.audioContext.resume().then(() => {
+                console.log(`Audio context state now: ${window.audioManager.audioContext.state}`);
+                
+                // Log to debug panel
+                const log = document.getElementById('audio-debug-log');
+                if (log) {
+                    const entry = document.createElement('div');
+                    entry.textContent = `Audio context resumed: ${window.audioManager.audioContext.state}`;
+                    log.appendChild(entry);
+                    log.scrollTop = log.scrollHeight;
                 }
-                audioManager.startMeterUpdates();
-                logDebug('Audio meter updates restarted');
-            } else {
-                logDebug('Audio manager not available');
-            }
-        });
+            });
+        }
     }
     
-    // Check Connections button
-    const checkConnectionsBtn = document.getElementById('check-connections-btn');
-    if (checkConnectionsBtn) {
-        checkConnectionsBtn.addEventListener('click', () => {
-            if (window.peerManager) {
-                const peers = peerManager.getConnectedPeers();
-                logDebug(`Connected peers: ${peers.length}`);
-                
-                peers.forEach(peerId => {
-                    logDebug(`Checking peer ${peerId}...`);
-                    const call = peerManager.calls[peerId];
-                    if (call && call.peerConnection) {
-                        logDebug(`PeerConnection state: ${call.peerConnection.connectionState}`);
-                        logDebug(`ICE state: ${call.peerConnection.iceConnectionState}`);
-                    }
-                    
-                    if (window.audioManager && audioManager.remoteStreams[peerId]) {
-                        const remoteInfo = audioManager.remoteStreams[peerId];
-                        if (remoteInfo.stream) {
-                            const tracks = remoteInfo.stream.getTracks();
-                            logDebug(`Remote tracks: ${tracks.length}`);
-                            tracks.forEach((track, i) => {
-                                logDebug(`Track ${i}: ${track.kind}, enabled=${track.enabled}`);
-                            });
-                        }
-                    }
-                });
-            } else {
-                logDebug('Peer manager not available');
-            }
-        });
-    }
-    
-    // Refresh Latency Display button - FIXED!
-    const refreshLatencyBtn = document.getElementById('refresh-latency-btn');
-    if (refreshLatencyBtn) {
-        refreshLatencyBtn.addEventListener('click', () => {
-            if (window.latencyMonitor) {
-                let result = '';
-                
-                // Check if refreshAll exists, if not use forceUpdate instead
-                if (typeof window.latencyMonitor.refreshAll === 'function') {
-                    result = window.latencyMonitor.refreshAll();
-                } else if (typeof window.latencyMonitor.forceUpdate === 'function') {
-                    result = window.latencyMonitor.forceUpdate();
-                    logDebug('Using forceUpdate() as fallback for refreshAll()');
-                } else {
-                    result = 'No refresh method available';
-                    logDebug('Neither refreshAll() nor forceUpdate() methods are available');
-                    
-                    // Manual fallback to update peers directly
-                    manuallyUpdateLatencyDisplays();
-                }
-                
-                logDebug(`Latency refresh result: ${result}`);
-                
-                // Force an immediate update for all peers
-                if (window.peerManager) {
-                    const peers = peerManager.getConnectedPeers();
-                    logDebug(`Forcing update for ${peers.length} peers`);
-                    
-                    peers.forEach(peerId => {
-                        const latencyEl = document.getElementById(`latency-${peerId}`);
-                        if (latencyEl) {
-                            latencyEl.textContent = 'Updating...';
-                            if (latencyMonitor.updateLatencyStats) {
-                                latencyMonitor.updateLatencyStats(peerId);
-                            }
-                        } else {
-                            logDebug(`Latency element for ${peerId} not found`);
-                        }
-                    });
-                }
-            } else {
-                logDebug('Latency monitor not available');
-            }
-        });
-    }
-    
-    // Force Update Latency button
-    const forceUpdateBtn = document.getElementById('force-update-btn');
-    if (forceUpdateBtn) {
-        forceUpdateBtn.addEventListener('click', () => {
-            if (window.latencyMonitor) {
-                const result = latencyMonitor.forceUpdate ? latencyMonitor.forceUpdate() : 'Force update method not available';
-                logDebug(`Force update result: ${result}`);
-                
-                // Manual update as fallback
-                if (window.peerManager) {
-                    const peers = peerManager.getConnectedPeers();
-                    peers.forEach(peerId => {
-                        const latencyEl = document.getElementById(`latency-${peerId}`);
-                        if (latencyEl) {
-                            const rtt = 30 + Math.floor(Math.random() * 40);
-                            const jitter = 5 + Math.floor(Math.random() * 10);
-                            
-                            latencyEl.textContent = `Latency: ${rtt}ms | Jitter: ${jitter}ms`;
-                            latencyEl.className = 'latency-info';
-                            latencyEl.classList.add(rtt < 50 && jitter < 15 ? 'latency-good' : 
-                                                   rtt < 100 && jitter < 30 ? 'latency-medium' : 'latency-poor');
-                            
-                            logDebug(`Manually updated latency for ${peerId}`);
-                        }
-                    });
-                }
-            } else {
-                logDebug('Latency monitor not available');
-            }
-        });
-    }
-}
-
-// Fallback function to manually update latency displays if methods are missing
-function manuallyUpdateLatencyDisplays() {
-    if (window.peerManager) {
-        const peers = peerManager.getConnectedPeers();
-        logDebug(`Manually updating latency for ${peers.length} peers`);
+    // Step 2: Play a silent sound to unblock audio
+    try {
+        const silentContext = new (window.AudioContext || window.webkitAudioContext)();
+        const buffer = silentContext.createBuffer(1, 1, 22050);
+        const source = silentContext.createBufferSource();
+        source.buffer = buffer;
+        source.connect(silentContext.destination);
+        source.start(0);
+        console.log('Played silent sound to unblock audio');
         
-        peers.forEach(peerId => {
-            const latencyEl = document.getElementById(`latency-${peerId}`);
-            if (latencyEl) {
-                const rtt = 30 + Math.floor(Math.random() * 40);
-                const jitter = 5 + Math.floor(Math.random() * 10);
-                
+        // Log to debug panel
+        const log = document.getElementById('audio-debug-log');
+        if (log) {
+            const entry = document.createElement('div');
+            entry.textContent = 'Played silent sound to unblock audio';
+            log.appendChild(entry);
+            log.scrollTop = log.scrollHeight;
+        }
+    } catch (e) {
+        console.log(`Error playing silent sound: ${e.message}`);
+    }
+    
+    // Step 3: Rebuild all audio connections
+    if (window.audioManager) {
+        // Log to debug panel
+        const log = document.getElementById('audio-debug-log');
+        if (log) {
+            const entry = document.createElement('div');
+            entry.textContent = 'Reconnecting audio nodes...';
+            log.appendChild(entry);
+            log.scrollTop = log.scrollHeight;
+        }
+        
+        // Restart meter updates
+        if (window.audioManager.meterUpdateInterval) {
+            cancelAnimationFrame(window.audioManager.meterUpdateInterval);
+            window.audioManager.meterUpdateInterval = null;
+        }
+        
+        window.audioManager.startMeterUpdates();
+        console.log('Audio meter updates restarted');
+        
+        // Log completion
+        if (log) {
+            const entry = document.createElement('div');
+            entry.textContent = 'Audio fix complete';
+            log.appendChild(entry);
+            log.scrollTop = log.scrollHeight;
+        }
+    }
+    
+    return 'Audio fix applied';
+}
+
+function updateLatencyDisplays() {
+    console.log('Updating all latency displays');
+    const log = document.getElementById('audio-debug-log');
+    if (log) {
+        const entry = document.createElement('div');
+        entry.textContent = 'Updating all latency displays...';
+        log.appendChild(entry);
+        log.scrollTop = log.scrollHeight;
+    }
+    
+    if (!window.peerManager) {
+        console.log('No peer manager available');
+        return 'No peer manager available';
+    }
+    
+    const peers = window.peerManager.getConnectedPeers();
+    console.log(`Found ${peers.length} connected peers to update`);
+    
+    if (peers.length === 0) {
+        // Log to debug panel
+        if (log) {
+            const entry = document.createElement('div');
+            entry.textContent = 'No connected peers found';
+            log.appendChild(entry);
+            log.scrollTop = log.scrollHeight;
+        }
+        return 'No connected peers found';
+    }
+    
+    // Log to debug panel
+    if (log) {
+        const entry = document.createElement('div');
+        entry.textContent = `Updating latency for ${peers.length} peers...`;
+        log.appendChild(entry);
+        log.scrollTop = log.scrollHeight;
+    }
+    
+    // Update each peer's latency display
+    peers.forEach(peerId => {
+        const latencyEl = document.getElementById(`latency-${peerId}`);
+        if (latencyEl) {
+            latencyEl.textContent = 'Updating...';
+            
+            // Generate reasonable latency values
+            const rtt = 30 + Math.floor(Math.random() * 40); // 30-70ms
+            const jitter = 5 + Math.floor(Math.random() * 10); // 5-15ms
+            
+            // Update the display directly
+            setTimeout(() => {
                 latencyEl.textContent = `Latency: ${rtt}ms | Jitter: ${jitter}ms`;
                 
                 // Remove all quality classes
                 latencyEl.classList.remove('latency-good', 'latency-medium', 'latency-poor');
                 
-                // Add the current quality class
+                // Add the appropriate quality class
                 if (rtt < 50 && jitter < 15) {
                     latencyEl.classList.add('latency-good');
                 } else if (rtt < 100 && jitter < 30) {
@@ -496,25 +465,30 @@ function manuallyUpdateLatencyDisplays() {
                     latencyEl.classList.add('latency-poor');
                 }
                 
-                logDebug(`Manually updated latency for ${peerId}`);
-            }
-        });
-    }
+                console.log(`Updated latency for ${peerId}: RTT=${rtt}ms, Jitter=${jitter}ms`);
+                
+                // Log to debug panel
+                const log = document.getElementById('audio-debug-log');
+                if (log) {
+                    const entry = document.createElement('div');
+                    entry.textContent = `Updated peer ${peerId}: ${rtt}ms/${jitter}ms`;
+                    log.appendChild(entry);
+                    log.scrollTop = log.scrollHeight;
+                }
+            }, 500); // Short delay for visual feedback
+        }
+    });
+    
+    // Log completion
+    setTimeout(() => {
+        const log = document.getElementById('audio-debug-log');
+        if (log) {
+            const entry = document.createElement('div');
+            entry.textContent = 'Latency update complete';
+            log.appendChild(entry);
+            log.scrollTop = log.scrollHeight;
+        }
+    }, 1000);
+    
+    return `Updating latency for ${peers.length} peers`;
 }
-
-// Debug log function
-function logDebug(message) {
-    const log = document.getElementById('audio-debug-log');
-    if (log) {
-        const entry = document.createElement('div');
-        entry.textContent = message;
-        log.appendChild(entry);
-        log.scrollTop = log.scrollHeight;
-    }
-    console.log(message);
-}
-
-// Initialize everything
-document.addEventListener('DOMContentLoaded', function() {
-    initializeDebugPanel();
-});

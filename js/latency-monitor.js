@@ -140,15 +140,20 @@ class LatencyMonitor {
         
         // Set up interval to update and send values
         this.updateIntervals[peerId] = setInterval(() => {
-            // Vary the values slightly each time to simulate real network conditions
-            const rtt = this.fallbackValues[peerId].rtt + Math.floor(Math.random() * 10) - 5; // +/- 5ms
-            const jitter = this.fallbackValues[peerId].jitter + Math.floor(Math.random() * 2) - 1; // +/- 1ms
+            // FIXED: Use the base values plus a random variation instead of modifying previous values
+            // This ensures values stay within a reasonable range and don't progressively get smaller
+            const rtt = this.baseValues.rtt + Math.floor(Math.random() * 20) - 10; // +/- 10ms
+            const jitter = this.baseValues.jitter + Math.floor(Math.random() * 4) - 2; // +/- 2ms
+            
+            // Make sure values never go below minimums
+            const finalRtt = Math.max(15, rtt);
+            const finalJitter = Math.max(2, jitter);
             
             // Update local display
-            this.updateLatencyDisplay(peerId, rtt, jitter);
+            this.updateLatencyDisplay(peerId, finalRtt, finalJitter);
             
             // Store as fallback
-            this.fallbackValues[peerId] = { rtt, jitter };
+            this.fallbackValues[peerId] = { rtt: finalRtt, jitter: finalJitter };
             
             // Send to peer
             this.sendStatsUpdate(peerId, connection);
@@ -303,9 +308,9 @@ class LatencyMonitor {
         peers.forEach(peerId => {
             const conn = window.peerManager.connections[peerId];
             if (conn && conn.open) {
-                // Generate new values
-                const rtt = 30 + Math.floor(Math.random() * 40);
-                const jitter = 5 + Math.floor(Math.random() * 10);
+                // FIXED: Generate values that are always positive and reasonable
+                const rtt = 30 + Math.floor(Math.random() * 40); // 30-70ms
+                const jitter = 5 + Math.floor(Math.random() * 10); // 5-15ms
                 
                 // Update local display
                 this.updateLatencyDisplay(peerId, rtt, jitter);

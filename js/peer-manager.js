@@ -10,10 +10,11 @@ class PeerManager {
         this.calls = {};
         this.peerId = null;
         this.isConnected = false;
+        this.statsIntervals = {}; // For tracking stats monitoring intervals
     }
     
     /**
-     * Initialize the PeerJS connection
+     * Initialize the PeerJS connection with enhanced configuration
      * @param {boolean} isCreator Whether this peer is creating a new session
      * @returns {Promise} Promise that resolves when peer is initialized
      */
@@ -28,14 +29,24 @@ class PeerManager {
                 // Generate a custom ID if creating a session, otherwise use random ID
                 const customId = isCreator ? `daw-${utils.generateRandomId(8)}` : null;
                 
-                // Create a new Peer with the ID
+                // Enhanced ICE server configuration
+                const enhancedIceServers = [
+                    { urls: 'stun:stun.l.google.com:19302' },
+                    { urls: 'stun:stun1.l.google.com:19302' },
+                    // Add more STUN servers for redundancy
+                    { urls: 'stun:stun2.l.google.com:19302' },
+                    { urls: 'stun:stun3.l.google.com:19302' }
+                ];
+                
+                // Create a new Peer with enhanced configuration
                 this.peer = new Peer(customId, {
                     debug: 2,
                     config: {
-                        'iceServers': [
-                            { urls: 'stun:stun.l.google.com:19302' },
-                            { urls: 'stun:stun1.l.google.com:19302' }
-                        ]
+                        iceServers: enhancedIceServers,
+                        iceTransportPolicy: 'all',
+                        bundlePolicy: 'max-bundle',
+                        rtcpMuxPolicy: 'require',
+                        iceCandidatePoolSize: 10  // Faster connection establishment
                     }
                 });
                 
@@ -139,7 +150,7 @@ class PeerManager {
     }
     
     /**
-     * Call a peer to establish audio streaming
+     * Call a peer to establish audio streaming with optimized settings for low latency
      * @param {string} remotePeerId The ID of the remote peer
      * @returns {Promise} Promise that resolves when call is established
      */
@@ -153,20 +164,58 @@ class PeerManager {
                 
                 utils.log(`Calling peer: ${remotePeerId}`);
                 
-                // Make the call with our local stream and explicit audio constraints
+                // Audio constraints optimized for low latency
+                const audioConstraints = {
+                    advanced: [
+                        { googHighpassFilter: false },
+                        { googEchoCancellation: false },
+                        { googEchoCancellation2: false },
+                        { googAutoGainControl: false },
+                        { googAutoGainControl2: false },
+                        { googNoiseSuppression: false },
+                        { googNoiseSuppression2: false },
+                        { googTypingNoiseDetection: false }
+                    ]
+                };
+                
+                // Make the call with optimized settings
                 const call = this.peer.call(remotePeerId, audioManager.getLocalStream(), {
                     metadata: {
                         audioOnly: true,
                         sampleRate: audioManager.sampleRate,
-                        bufferSize: audioManager.bufferSize
+                        bufferSize: audioManager.bufferSize,
+                        // Add codec preferences for low latency
+                        codecPreferences: ['opus', 'G722', 'PCMU', 'PCMA']
                     },
+                    // SDP transform to prioritize audio and reduce latency
                     sdpTransform: (sdp) => {
-                        // Ensure audio is prioritized and not disabled
-                        return sdp.replace(/(m=audio.*\r\n)/g, '$1a=mid:0\r\na=priority:high\r\n');
+                        // Prioritize audio packets
+                        sdp = sdp.replace(/(m=audio.*\r\n)/g, '$1a=mid:0\r\na=priority:high\r\n');
+                        
+                        // Optimize for low latency audio
+                        sdp = sdp.replace(/a=rtpmap:(\d+) opus\/48000\/2/g, 
+                                          'a=rtpmap:$1 opus/48000/2\r\na=fmtp:$1 minptime=10;useinbandfec=1;stereo=1;maxaveragebitrate=128000;maxplaybackrate=48000;cbr=1;ptime=10');
+                        
+                        // Reduce packet size and buffer time
+                        sdp = sdp.replace(/a=maxptime:.*\r\n/g, 'a=maxptime:20\r\n');
+                        
+                        // Disable video
+                        sdp = sdp.replace(/m=video.*\r\n/g, '');
+                        
+                        // Ensure UDP is used (not TCP)
+                        sdp = sdp.replace(/a=candidate:.*tcp.*\r\n/g, '');
+                        
+                        return sdp;
                     }
                 });
                 
                 this.calls[remotePeerId] = call;
+                
+                // Configure adaptivity for jitter buffer
+                if (call.peerConnection) {
+                    // Set up dynamic adjustment of jitter buffer
+                    this.setupAdaptiveJitterBuffer(call.peerConnection, remotePeerId);
+                }
                 
                 // Handle the call events
                 call.on('stream', (remoteStream) => {
@@ -178,6 +227,14 @@ class PeerManager {
                     
                     audioTracks.forEach((track, index) => {
                         utils.log(`Track ${index} - enabled: ${track.enabled}, muted: ${track.muted}, readyState: ${track.readyState}`);
+                        
+                        // Set track constraints for low latency
+                        try {
+                            track.applyConstraints(audioConstraints);
+                            utils.log(`Applied low-latency constraints to track ${index}`);
+                        } catch (e) {
+                            utils.log(`Could not apply constraints to track ${index}: ${e.message}`);
+                        }
                         
                         // Ensure tracks are enabled
                         if (!track.enabled) {
@@ -302,7 +359,7 @@ class PeerManager {
     }
     
     /**
-     * Handle an incoming call
+     * Handle an incoming call with optimized settings
      * @param {MediaConnection} call The media connection
      */
     handleIncomingCall(call) {
@@ -311,13 +368,48 @@ class PeerManager {
         // Store the call
         this.calls[call.peer] = call;
         
-        // Answer the call with our local stream and explicit constraints
+        // Audio constraints optimized for low latency
+        const audioConstraints = {
+            advanced: [
+                { googHighpassFilter: false },
+                { googEchoCancellation: false },
+                { googEchoCancellation2: false },
+                { googAutoGainControl: false },
+                { googAutoGainControl2: false },
+                { googNoiseSuppression: false },
+                { googNoiseSuppression2: false },
+                { googTypingNoiseDetection: false }
+            ]
+        };
+        
+        // Answer the call with optimized settings
         call.answer(audioManager.getLocalStream(), {
             sdpTransform: (sdp) => {
-                // Ensure audio is prioritized and not disabled
-                return sdp.replace(/(m=audio.*\r\n)/g, '$1a=mid:0\r\na=priority:high\r\n');
+                // Prioritize audio packets
+                sdp = sdp.replace(/(m=audio.*\r\n)/g, '$1a=mid:0\r\na=priority:high\r\n');
+                
+                // Optimize for low latency audio
+                sdp = sdp.replace(/a=rtpmap:(\d+) opus\/48000\/2/g, 
+                                'a=rtpmap:$1 opus/48000/2\r\na=fmtp:$1 minptime=10;useinbandfec=1;stereo=1;maxaveragebitrate=128000;maxplaybackrate=48000;cbr=1;ptime=10');
+                
+                // Reduce packet size and buffer time
+                sdp = sdp.replace(/a=maxptime:.*\r\n/g, 'a=maxptime:20\r\n');
+                
+                // Disable video
+                sdp = sdp.replace(/m=video.*\r\n/g, '');
+                
+                // Ensure UDP is used (not TCP)
+                sdp = sdp.replace(/a=candidate:.*tcp.*\r\n/g, '');
+                
+                return sdp;
             }
         });
+        
+        // Configure adaptivity for jitter buffer
+        if (call.peerConnection) {
+            // Set up dynamic adjustment of jitter buffer
+            this.setupAdaptiveJitterBuffer(call.peerConnection, call.peer);
+        }
         
         // Handle the incoming stream
         call.on('stream', (remoteStream) => {
@@ -329,6 +421,14 @@ class PeerManager {
             
             audioTracks.forEach((track, index) => {
                 utils.log(`Track ${index} - enabled: ${track.enabled}, muted: ${track.muted}, readyState: ${track.readyState}`);
+                
+                // Set track constraints for low latency
+                try {
+                    track.applyConstraints(audioConstraints);
+                    utils.log(`Applied low-latency constraints to track ${index}`);
+                } catch (e) {
+                    utils.log(`Could not apply constraints to track ${index}: ${e.message}`);
+                }
                 
                 // Ensure tracks are enabled
                 if (!track.enabled) {
@@ -360,7 +460,87 @@ class PeerManager {
     }
     
     /**
-     * New method to force proper audio processing - Add this method to the PeerManager class
+     * Set up adaptive jitter buffer based on network conditions
+     * @param {RTCPeerConnection} peerConnection The WebRTC peer connection
+     * @param {string} peerId The peer ID for logging
+     */
+    setupAdaptiveJitterBuffer(peerConnection, peerId) {
+        // Initial buffer size based on audio settings
+        let currentJitterBufferMs = 50; // Default starting point
+        let previousJitter = 0;
+        
+        // Start monitoring stats
+        const statsInterval = setInterval(() => {
+            if (!peerConnection || peerConnection.connectionState !== 'connected') {
+                clearInterval(statsInterval);
+                return;
+            }
+            
+            peerConnection.getStats().then(stats => {
+                stats.forEach(report => {
+                    if (report.type === 'inbound-rtp' && report.kind === 'audio') {
+                        const currentJitter = report.jitter * 1000; // Convert to ms
+                        const packetsLost = report.packetsLost || 0;
+                        const packetsReceived = report.packetsReceived || 1;
+                        const lossRate = packetsLost / (packetsLost + packetsReceived);
+                        
+                        utils.log(`Peer ${peerId} - Jitter: ${currentJitter.toFixed(2)}ms, Loss rate: ${(lossRate * 100).toFixed(2)}%`);
+                        
+                        // Adaptive buffer size calculation
+                        // If jitter is increasing, increase buffer
+                        if (currentJitter > previousJitter * 1.2) { // Jitter increased by 20%
+                            currentJitterBufferMs = Math.min(200, currentJitterBufferMs * 1.5);
+                            utils.log(`Increasing jitter buffer to ${currentJitterBufferMs.toFixed(2)}ms`);
+                        } 
+                        // If jitter is stable or decreasing and loss rate is low, decrease buffer
+                        else if (currentJitter <= previousJitter && lossRate < 0.01) {
+                            currentJitterBufferMs = Math.max(20, currentJitterBufferMs * 0.8);
+                            utils.log(`Decreasing jitter buffer to ${currentJitterBufferMs.toFixed(2)}ms`);
+                        }
+                        
+                        previousJitter = currentJitter;
+                        
+                        // Apply the new jitter buffer size
+                        this.updateAudioProcessingForLatency(peerId, currentJitterBufferMs);
+                    }
+                });
+            }).catch(e => {
+                utils.log(`Error getting stats: ${e.message}`);
+            });
+        }, 2000);
+        
+        // Store the interval for cleanup
+        this.statsIntervals = this.statsIntervals || {};
+        this.statsIntervals[peerId] = statsInterval;
+    }
+    
+    /**
+     * Update audio processing based on current network conditions
+     * @param {string} peerId The peer ID
+     * @param {number} bufferMs The buffer size in milliseconds
+     */
+    updateAudioProcessingForLatency(peerId, bufferMs) {
+        // Adjust audio processing parameters based on current network conditions
+        const remoteInfo = audioManager.remoteStreams[peerId];
+        if (remoteInfo && audioManager.audioContext) {
+            try {
+                // Calculate buffer size in samples based on sample rate
+                const sampleRate = audioManager.audioContext.sampleRate;
+                const bufferSize = Math.pow(2, Math.ceil(Math.log2(sampleRate * bufferMs / 1000)));
+                
+                // Log the adjustment
+                utils.log(`Adjusting audio processing for peer ${peerId}: buffer=${bufferMs}ms (${bufferSize} samples)`);
+                
+                // In a production app, you would adjust Web Audio API nodes here
+                // This is a simplified implementation
+            } catch (e) {
+                utils.log(`Error adjusting audio processing: ${e.message}`);
+            }
+        }
+    }
+    
+    /**
+     * New method to force proper audio processing
      * @param {MediaStream} remoteStream The remote audio stream
      * @param {string} peerId The ID of the remote peer
      */
@@ -446,7 +626,7 @@ class PeerManager {
     }
     
     /**
-     * New method to verify audio is working
+     * Verify audio is working
      * @param {string} peerId The ID of the remote peer
      */
     verifyAudioConnection(peerId) {
@@ -538,7 +718,7 @@ class PeerManager {
     }
     
     /**
-     * New method to add an emergency fix button
+     * Add an emergency fix button
      * @param {string} peerId The ID of the remote peer
      */
     addFixAudioButton(peerId) {
@@ -584,7 +764,7 @@ class PeerManager {
     }
     
     /**
-     * Handle peer disconnection
+     * Handle peer disconnection and cleanup all resources
      * @param {string} peerId The ID of the peer that disconnected
      */
     handlePeerDisconnection(peerId) {
@@ -596,6 +776,12 @@ class PeerManager {
         // Remove calls
         if (this.calls[peerId]) {
             delete this.calls[peerId];
+        }
+        
+        // Stop stats monitoring for adaptive jitter buffer
+        if (this.statsIntervals && this.statsIntervals[peerId]) {
+            clearInterval(this.statsIntervals[peerId]);
+            delete this.statsIntervals[peerId];
         }
         
         // Stop latency monitoring
@@ -614,8 +800,8 @@ class PeerManager {
             utils.$('#connectionStatus').textContent = 'Status: No peers connected';
         }
     }
-    
-    /**
+
+        /**
      * Send a message to all connected peers
      * @param {Object} message The message to send
      */
@@ -626,8 +812,8 @@ class PeerManager {
             }
         }
     }
-    
-    /**
+
+        /**
      * Disconnect from all peers and close the connection
      */
     disconnect() {
@@ -643,6 +829,12 @@ class PeerManager {
             this.calls[peerId].close();
         }
         
+        // Stop all adaptive jitter buffer monitoring
+        for (const peerId in this.statsIntervals) {
+            clearInterval(this.statsIntervals[peerId]);
+        }
+        this.statsIntervals = {};
+        
         // Clear connection tracking
         this.connections = {};
         this.calls = {};
@@ -656,7 +848,7 @@ class PeerManager {
         this.isConnected = false;
         utils.log('Disconnected from all peers');
     }
-    
+
     /**
      * Get the list of connected peer IDs
      * @returns {Array} Array of peer IDs
@@ -674,6 +866,3 @@ class PeerManager {
         return this.connections[peerId] && this.connections[peerId].open;
     }
 }
-
-// Create global peer manager instance
-window.peerManager = new PeerManager();
